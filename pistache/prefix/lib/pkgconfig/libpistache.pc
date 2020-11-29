@@ -1,0 +1,14 @@
+prefix=/home/user/Documents/DPS/A2/DPS_A2/pistache/prefix
+exec_prefix=/home/user/Documents/DPS/A2/DPS_A2/pistache/prefix/bin
+libdir=/home/user/Documents/DPS/A2/DPS_A2/pistache/prefix/lib/
+includedir=/home/user/Documents/DPS/A2/DPS_A2/pistache/prefix/include/
+
+Name: libpistache
+URL: http://pistache.io/
+Description: An elegant C++ REST framework.
+Version: 0.0.002-git20200802
+Requires:
+Libs: -L'${libdir}/' -lpistache -lpthread
+Libs.private:
+Cflags: -I'${includedir}/'
+

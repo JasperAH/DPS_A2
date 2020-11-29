@@ -1,7 +1,11 @@
 CC = gcc
 CXX = g++
 CFLAGS = -Wall -Wextra -Wno-unused-result -Wno-unused-parameter -Wno-unused-but-set-variable -O3 -g
-CXXFLAGS = $(CFLAGS) -std=c++11 -mcmodel=medium -lcurl
+IFLAGS = -lcurl 
+IFLAGS += $(shell pkg-config --libs libpistache)
+IFLAGS += $(shell pkg-config --cflags libpistache)
+CXXFLAGS = $(CFLAGS) -std=c++11 -mcmodel=medium $(IFLAGS)
+
 
 all:	client worker
 
@@ -17,9 +21,9 @@ client.o: client.cpp
 
 
 worker.o: worker.cpp
-	$(CXX) -c worker.cpp
+	$(CXX) $(IFLAGS) -c worker.cpp
 
 clean:
-	rm -f *o
+	rm -f *\.o
 	rm -f client
 	rm -f worker
