@@ -29,3 +29,15 @@ The `client.cpp` file contains code for the client, the `worker.cpp` file contai
 
 ### DAS5 
 It seems the above instructions do not hold up on the DAS5 cluster. Might have to do with the cmake version installed there, but further investigation is required.
+
+
+### MILESTONES
+- [x] connection between a 1-node server and a client (curl works)
+- [ ] a client asks for connection at a master node, gets a worker node assigned, gets connection
+- [ ] a workload is given to a client and result is returned
+- [ ] workload distribution at master-node
+- [ ] failure detection with heartbeats and or timeouts in server
+- [ ] failure detection for client failure with heartbeats and or timeouts
+- [ ] master node election system in case of failure
+- [ ] workernode failure work recovery
+- [ ] workernode failure client redistribution
