@@ -10,14 +10,56 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     return size * nmemb;
 }
 
-void getMaster(){ //TODO
-    throw "getMaster is not implemented yet.";
-    return;
+std::string getMaster(std::string host){ //TODO
+
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    curl = curl_easy_init();
+    if(curl) {
+        host.append("/get_master");
+        curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if(res == 0){ // we got a response TODO add response codes or something for each error case
+            return readBuffer;
+        }
+    }else{
+        fprintf(stderr,"Could not init curl\n");
+        return "failure";
+    }
+    return "failure";
 }
 
-void getWorker(){ //TODO
-    throw "getWorker is not implemented yet.";
-    return;
+std::string getWorker(std::string host){ //TODO
+    
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    curl = curl_easy_init();
+    if(curl) {
+        host.append("/get_worker");
+        curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if(res == 0){ // we got a response TODO add response codes or something for each error case
+            return readBuffer;
+        }
+    }else{
+        fprintf(stderr,"Could not init curl\n");
+        return "failure";
+    }
+    return "failure";
 }
 
 void getProblem(){ //TODO
@@ -37,14 +79,44 @@ void sendResult(){ //TODO
 
 int main(int argc, char **argv)
 {
+    if (argc < 2)
+    {
+        std::cout << "should be called as ./client [connectionpoint]" << std::endl;
+        return -1;
+    }
+    
+    std::string host = argv[1];
+    std::string master = getMaster(host);
+    if (master == "failure")
+    {
+        std::cout << "tsja TODO" << std::endl;
+    }
+    
+    std::cout << master << std::endl;
 
+    std::string worker = getWorker(master);
+
+    if (worker == "")
+    {
+        std::cout << "empty worker assignment" << std::endl;
+    }
+    else
+    {
+        std::cout << worker << std::endl;
+    }
+    
+    
+/*
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
 
     curl = curl_easy_init();
     if(curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, "localhost");
+        std::string str = "localhost";
+        std::string tmp = "/ping";
+        //str.append("/ping");
+        curl_easy_setopt(curl, CURLOPT_URL, str+tmp);
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
@@ -52,6 +124,6 @@ int main(int argc, char **argv)
         curl_easy_cleanup(curl);
 
         std::cout << readBuffer << std::endl;
-    }
+    }*/
     return 0;
 }
