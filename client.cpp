@@ -105,25 +105,5 @@ int main(int argc, char **argv)
         std::cout << worker << std::endl;
     }
     
-    
-/*
-    CURL *curl;
-    CURLcode res;
-    std::string readBuffer;
-
-    curl = curl_easy_init();
-    if(curl) {
-        std::string str = "localhost";
-        std::string tmp = "/ping";
-        //str.append("/ping");
-        curl_easy_setopt(curl, CURLOPT_URL, str+tmp);
-        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        res = curl_easy_perform(curl);
-        curl_easy_cleanup(curl);
-
-        std::cout << readBuffer << std::endl;
-    }*/
     return 0;
 }

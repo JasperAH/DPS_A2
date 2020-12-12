@@ -33,7 +33,7 @@ It seems the above instructions do not hold up on the DAS5 cluster. Might have t
 
 ### MILESTONES
 - [x] connection between a 1-node server and a client (curl works)
-- [ ] a client asks for connection at a master node, gets a worker node assigned, gets connection
+- [x] a client asks for connection at a master node, gets a worker node assigned, gets connection
 - [ ] a workload is given to a client and result is returned
 - [ ] workload distribution at master-node
 - [ ] failure detection with heartbeats and or timeouts in server

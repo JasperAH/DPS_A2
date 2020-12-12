@@ -8,17 +8,24 @@ int worker_id;
 int master_id;
 int n_workers;
 char** hostnames;
+int * workload;
+
+static int MAXCLIENTS = 5; //TODO find optimum
 //using namespace Pistache;
 
 /******************************************Master functions*******************************/
 
 std::string assignWorker(){
   //throw "getProblemData is not implemented yet.";
+  for (int i = 0; i < n_workers; i++)
+  {
+    if (workload[i] < MAXCLIENTS)
+    {
+      return hostnames[i];
+    }
+  }
   return "";
 }
-
-/******************************************Internal functions*******************************/
-
 
 /**************************************Client serving  functions**************************/
 void getProblemData(void *ptr, int & size){ //TODO
@@ -31,7 +38,7 @@ void postResultInternally(){ //TODO
     return;
 }
 
-/**********************************************Handlers**********************************/
+/**********************************************Handler**********************************/
 struct HelloHandler : public Pistache::Http::Handler {
   HTTP_PROTOTYPE(HelloHandler);
   void onRequest(const Pistache::Http::Request& request, Pistache::Http::ResponseWriter writer) override{
@@ -42,10 +49,10 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     else if(request.resource().compare("/get_master") == 0 && request.method() == Pistache::Http::Method::Get){
-      writer.send(Pistache::Http::Code::Ok, "localhost"); // return own ID for master election
+      writer.send(Pistache::Http::Code::Ok, hostnames[master_id]); // return hostname of master
     }
     else if(request.resource().compare("/get_worker") == 0 && request.method() == Pistache::Http::Method::Get){
-      writer.send(Pistache::Http::Code::Ok, assignWorker()); // return own ID for master election
+      writer.send(Pistache::Http::Code::Ok, assignWorker()); // return hostname of assigned worker
     }
   }
 };
@@ -125,8 +132,10 @@ int main(int argc, char **argv) {
   worker_id = atoi(argv[1]);
   n_workers = argc - 2;
   hostnames = (char**) malloc(sizeof(char*)*(argc-2));
+  workload = (int*) malloc(sizeof(int)*(argc-2));
   for(int i = 0; i < n_workers; ++i){
     hostnames[i] = argv[i+2];
+    workload[i]++;
   }
 
   // INIT pistache
