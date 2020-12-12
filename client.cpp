@@ -10,6 +10,31 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     return size * nmemb;
 }
 
+void getMaster(){ //TODO
+    throw "getMaster is not implemented yet.";
+    return;
+}
+
+void getWorker(){ //TODO
+    throw "getWorker is not implemented yet.";
+    return;
+}
+
+void getProblem(){ //TODO
+    throw "getProblem is not implemented yet.";
+    return;
+}
+
+void heartbeat(){ //TODO
+    throw "heartbeat is not implemented yet.";
+    return;
+}
+
+void sendResult(){ //TODO
+    throw "sendResult is not implemented yet.";
+    return;
+}
+
 int main(int argc, char **argv)
 {
 
