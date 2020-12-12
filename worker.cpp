@@ -4,13 +4,15 @@
 #include <curl/curl.h>
 #include <chrono>
 
-
+int worker_id;
 //using namespace Pistache;
 
 struct HelloHandler : public Pistache::Http::Handler {
   HTTP_PROTOTYPE(HelloHandler);
-  void onRequest(const Pistache::Http::Request&, Pistache::Http::ResponseWriter writer) override{
-    writer.send(Pistache::Http::Code::Ok, "Hello, World!\n");
+  void onRequest(const Pistache::Http::Request& request, Pistache::Http::ResponseWriter writer) override{
+    if(request.resource().compare("/get_id") == 0 && request.method() == Pistache::Http::Method::Get){
+      writer.send(Pistache::Http::Code::Ok, std::to_string(worker_id)); //
+    }
   }
 };
 
@@ -54,7 +56,7 @@ int main(int argc, char **argv) {
       return -1;
   }
 
-  int worker_id = atoi(argv[1]);
+  worker_id = atoi(argv[1]);
   int master_id;
   int n_workers = argc - 2;
   char* hostnames[argc-2];
