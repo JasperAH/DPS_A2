@@ -4,10 +4,25 @@
 #include <curl/curl.h>
 #include <chrono>
 
+#include <sstream>
+#include <vector>
+#include <fstream>
+
+const std::string dataPath = "/home/user/Documents/DPS/A2/";
+
+bool stop_server = false;
+
 int worker_id;
 int master_id;
 int n_workers;
 char** hostnames;
+
+std::vector<std::vector<int>> inputData; // 2d matrix of inputdata
+std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> distributedData; // list of worker_id, has_returned_result, start_index, end_index (excl)
+int output = 0;
+int curIndex = 0;
+int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
+bool rollback = false;
 //using namespace Pistache;
 
 struct HelloHandler : public Pistache::Http::Handler {
@@ -19,6 +34,32 @@ struct HelloHandler : public Pistache::Http::Handler {
     if(request.resource().compare("/heartbeat") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
+    if(request.resource().compare("/stop") == 0 && request.method() == Pistache::Http::Method::Get){
+      stop_server = true;
+      writer.send(Pistache::Http::Code::Ok); // return OK
+    }
+    if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
+      Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok); // open datastream for response
+      // return data as CSV, amount is controlled by getProblemDataSize
+      int maxIndex = ((curIndex + getProblemDataSize) > inputData.at(0).size()) ? inputData.at(0).size() : (curIndex + getProblemDataSize);
+      for(int i = curIndex; i < maxIndex; ++i){
+        std::string line = "";
+        for(int j = 0; j < inputData.size(); ++j){
+          line += std::to_string(inputData.at(j).at(i));
+          if(j < (inputData.size()-1)) line += ",";
+        }
+        rStream << line.c_str() << "\n";
+        rStream << Pistache::Http::flush; //optional? should ensure sending data more often
+      }     
+
+      // TODO vervang 0 met worker_id en maak deze if een POST met request.query()
+      distributedData.push_back({{0,false},{curIndex,curIndex+getProblemDataSize}});
+      curIndex += getProblemDataSize;
+
+
+      rStream << Pistache::Http::ends; // also flushes and ends the stream
+    }
+    writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
   }
 };
 
@@ -51,7 +92,93 @@ bool sendHeartBeat(){
   }
 }
 
-int elect_master(){
+void checkpoint_data(){
+  fprintf(stderr,"snapshotting data\n");
+  std::ofstream csv_file(dataPath+"snapshot.csv");
+  csv_file << output << "\n"; // snapshot partial result
+
+  for(int i = 0; i < inputData.at(0).size(); ++i){
+    for(int col = 0; col < inputData.size(); ++col){
+      csv_file << inputData.at(col).at(i);
+      if(col < (inputData.size() -1)){
+        csv_file << ",";
+      }
+    }
+    csv_file << "\n";
+  }
+  csv_file.close();
+
+  csv_file.open(dataPath+"snapshot_distributed.csv");
+  for(int i = 0; i < distributedData.size(); ++i){
+    csv_file << std::to_string(distributedData.at(i).first.first) << ",";
+    csv_file << std::to_string(distributedData.at(i).first.second) << ",";
+    csv_file << std::to_string(distributedData.at(i).second.first) << ",";
+    csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+  }
+  csv_file.close();
+}
+
+void read_input_data(){
+  // open file, checking for a snapshot first
+  std::ifstream csv_file(dataPath+"snapshot.csv");
+  if(!csv_file.good()){
+    fprintf(stderr,"no snapshot found, opening data\n");
+    csv_file.close();
+    csv_file.open(dataPath+"data.csv");
+  } else{
+    fprintf(stderr,"reading snapshot data from file\n");
+    rollback = true;
+  }
+
+  bool initialized = false;
+  std::string line;
+
+  if(csv_file.is_open()){
+    std::getline(csv_file,line);
+    output = atoi(line.c_str()); // first line in the file is the snapshotted result
+    while(std::getline(csv_file,line)){
+        int column = 0;
+        std::string value;
+        std::stringstream ss2(line);
+
+        while(std::getline(ss2,value,',')){
+          if(!initialized) inputData.push_back(std::vector<int> {});
+          inputData.at(column).push_back(atoi(value.c_str()));
+          column++;
+        }
+        initialized = true;
+    }
+  } else {
+    fprintf(stderr,"couldn't open file to read\n");
+  }
+  csv_file.close();
+
+  if(rollback){
+    csv_file.open(dataPath+"snapshot_distributed.csv");
+    if(csv_file.is_open()){
+      while(std::getline(csv_file,line)){
+        int column = 0;
+        std::string value;
+        std::stringstream ss2(line);
+
+        int wid, start_ind, end_ind;
+        bool has_returned;
+        while(std::getline(ss2,value,',')){
+          if(column == 0) wid = atoi(value.c_str());
+          else if(column == 1) has_returned = (atoi(value.c_str()) == 1);
+          else if(column == 2) start_ind = atoi(value.c_str());
+          else if(column == 3) end_ind = atoi(value.c_str());
+          column++;
+        }
+
+        distributedData.push_back({{wid,has_returned},{start_ind,end_ind}});
+      }
+    }
+  }
+  csv_file.close();
+}
+
+void elect_master(){
   fprintf(stderr,"Electing new master\n");
 
   int lowest_id = worker_id;
@@ -83,7 +210,9 @@ int elect_master(){
     }
   }
   fprintf(stderr,"new master_id: %d\n",lowest_id);
-  return lowest_id;
+  master_id = lowest_id;
+  if(worker_id == master_id)
+    read_input_data();
 }
 
 int main(int argc, char **argv) {
@@ -113,16 +242,24 @@ int main(int argc, char **argv) {
   fprintf(stderr,"Server running at %s:%s\n",addr.host().c_str(),addr.port().toString().c_str());
 
   // INIT master
-  master_id = elect_master();
+  elect_master();
 
-  // INIT clock & heartbeat
-  std::chrono::time_point<std::chrono::system_clock> prev_time = std::chrono::system_clock::now();
-  double heartbeat_interval = 5.0;
+
+  checkpoint_data();
+
+
+  // INIT clocks & heartbeat
+  std::chrono::time_point<std::chrono::system_clock> heartbeat_time = std::chrono::system_clock::now();
+  std::chrono::time_point<std::chrono::system_clock> snapshot_time = std::chrono::system_clock::now();
+  std::chrono::duration<double> diff;
+  double heartbeat_interval = 5.0; // heartbeat once every 5 sec
+  double snapshot_interval = 300.0; // snapshot every 5 min
   int master_down_counter = 0;
 
-  while(true){
+  while(!stop_server){
     // HEARTBEAT
-    if((master_id != worker_id) && ((std::chrono::system_clock::now() - prev_time).count() > heartbeat_interval)){ // every 5 seconds, heartbeat
+    diff = std::chrono::system_clock::now() - heartbeat_time;
+    if((master_id != worker_id) && (diff.count() > heartbeat_interval)){ // every 5 seconds, heartbeat
       if(!sendHeartBeat()){ // master is down, check every second
         master_down_counter++;
         heartbeat_interval = 1.0;
@@ -131,16 +268,21 @@ int main(int argc, char **argv) {
         heartbeat_interval = 5.0;
       }
       if(master_down_counter >= 5){ // if master stays down, elect new master
-        master_id = elect_master();
+        elect_master();
         master_down_counter = 0;
         heartbeat_interval = 5.0;
       }
-      prev_time = std::chrono::system_clock::now();
+      heartbeat_time = std::chrono::system_clock::now();
     }
 
-
+    // SNAPSHOT periodically
+    diff = std::chrono::system_clock::now() - snapshot_time;
+    if(master_id == worker_id && (diff.count() > snapshot_interval)){
+      checkpoint_data();
+      snapshot_time = std::chrono::system_clock::now();
+    }
 
   }
-
+  fprintf(stderr,"stopping server\n");
   free(hostnames);
 }
