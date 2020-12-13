@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 
+//edit this depending on device
 const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
 bool stop_server = false;
@@ -17,6 +18,7 @@ int master_id;
 int n_workers;
 char** hostnames;
 
+// MASTER stuff
 std::vector<std::vector<int>> inputData; // 2d matrix of inputdata
 std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> distributedData; // list of worker_id, has_returned_result, start_index, end_index (excl)
 int output = 0;
@@ -38,8 +40,23 @@ struct HelloHandler : public Pistache::Http::Handler {
       stop_server = true;
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
-    if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
+    // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
+    if(master_id == worker_id && request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Post){
+      int res = atoi(request.query().get("result").get().c_str());
+      int ind = atoi(request.query().get("index").get().c_str());
+      output += res;
+      distributedData.at(ind).first.second = true;
+      writer.send(Pistache::Http::Code::Ok); // return OK
+    }
+    // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>
+    if(master_id == worker_id && request.query().get("q").get() == "getproblemdata" && request.method() == Pistache::Http::Method::Post){
+      int wID = atoi(request.query().get("workerID").get().c_str());
+    //}
+    //if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
       Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok); // open datastream for response
+      // first send index in vector:
+      rStream << std::to_string(distributedData.size()).c_str() << "\n";
+      rStream << Pistache::Http::flush;
       // return data as CSV, amount is controlled by getProblemDataSize
       int maxIndex = ((curIndex + getProblemDataSize) > inputData.at(0).size()) ? inputData.at(0).size() : (curIndex + getProblemDataSize);
       for(int i = curIndex; i < maxIndex; ++i){
@@ -53,9 +70,8 @@ struct HelloHandler : public Pistache::Http::Handler {
       }     
 
       // TODO vervang 0 met worker_id en maak deze if een POST met request.query()
-      distributedData.push_back({{0,false},{curIndex,curIndex+getProblemDataSize}});
+      distributedData.push_back({{wID,false},{curIndex,curIndex+getProblemDataSize}});
       curIndex += getProblemDataSize;
-
 
       rStream << Pistache::Http::ends; // also flushes and ends the stream
     }
@@ -93,7 +109,7 @@ bool sendHeartBeat(){
 }
 
 void checkpoint_data(){
-  fprintf(stderr,"snapshotting data\n");
+  fprintf(stderr,"snapshotting current progress\n");
   std::ofstream csv_file(dataPath+"snapshot.csv");
   csv_file << output << "\n"; // snapshot partial result
 
@@ -173,6 +189,7 @@ void read_input_data(){
 
         distributedData.push_back({{wid,has_returned},{start_ind,end_ind}});
       }
+      curIndex = distributedData.at(distributedData.size()-1).second.second;
     }
   }
   csv_file.close();
@@ -282,7 +299,19 @@ int main(int argc, char **argv) {
       snapshot_time = std::chrono::system_clock::now();
     }
 
+    // check if we're done when all data has been distributed
+    if(master_id == worker_id && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
+      bool done = true;
+      for(int i = 0; i < distributedData.size(); ++i){
+        if(distributedData.at(i).first.second == false)
+          done = false;
+      }
+
+      stop_server = done;
+    }
   }
   fprintf(stderr,"stopping server\n");
+  checkpoint_data();
+  fprintf(stdout, "result: %d\n",output);
   free(hostnames);
 }
