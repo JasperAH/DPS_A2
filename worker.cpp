@@ -34,7 +34,15 @@ int curIndex = 0;
 int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
 bool rollback = false;
 
-//using namespace Pistache;
+
+// WORKER stuff
+
+
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
 
 /******************************************Master functions*******************************/
 
@@ -115,11 +123,13 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
-    if(master_id == worker_id && request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Post){
+    if(master_id == worker_id && request.query().get("q").get() == "mResult" && request.method() == Pistache::Http::Method::Get){
       int res = atoi(request.query().get("result").get().c_str());
       int ind = atoi(request.query().get("index").get().c_str());
-      output += res;
-      distributedData.at(ind).first.second = true;
+      if(distributedData.at(ind).first.second == false){
+        output += res;
+        distributedData.at(ind).first.second = true;
+      }
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     // usage: <host>:<port>/?q=resultClient\&index=<vector_index>\&result=<result>
@@ -160,12 +170,6 @@ struct HelloHandler : public Pistache::Http::Handler {
     writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
   }
 };
-
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
 
 bool sendHeartBeat(){
   CURL *curl;
@@ -254,6 +258,7 @@ void read_input_data(){
   csv_file.close();
 
   if(rollback){
+    fprintf(stderr,"reading distributed snapshot data from file\n");
     csv_file.open(dataPath+"snapshot_distributed.csv");
     if(csv_file.is_open()){
       while(std::getline(csv_file,line)){
@@ -273,7 +278,11 @@ void read_input_data(){
 
         distributedData.push_back({{wid,has_returned},{start_ind,end_ind}});
       }
-      curIndex = distributedData.at(distributedData.size()-1).second.second;
+      if(distributedData.size() > 0){
+        curIndex = distributedData.at(distributedData.size()-1).second.second;
+      } else{
+        curIndex = 0;
+      }
     }
   }
   csv_file.close();
@@ -407,7 +416,7 @@ int main(int argc, char **argv) {
   // INIT pistache
   Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
 
-  auto opts = Pistache::Http::Endpoint::options().threads(1);
+  auto opts = Pistache::Http::Endpoint::options().threads(8);
   Pistache::Http::Endpoint server(addr);
   server.init(opts);
   server.setHandler(std::make_shared<HelloHandler>());
@@ -417,8 +426,6 @@ int main(int argc, char **argv) {
 
   // INIT master
   elect_master();
-
-
   checkpoint_data();
 
 
@@ -470,7 +477,7 @@ int main(int argc, char **argv) {
     }
 
     // check if we're done when all data has been distributed
-    if(master_id == worker_id && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
+    if(master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
       bool done = true;
       for(int i = 0; i < distributedData.size(); ++i){
         if(distributedData.at(i).first.second == false)
@@ -481,7 +488,9 @@ int main(int argc, char **argv) {
     }
   }
   fprintf(stderr,"stopping server\n");
-  checkpoint_data();
-  fprintf(stdout, "result: %d\n",output);
+  if(master_id == worker_id){
+    checkpoint_data();
+    fprintf(stdout, "result: %d\n",output);
+  }
   free(hostnames);
 }
