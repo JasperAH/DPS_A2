@@ -30,6 +30,37 @@ bool rollback = false;
 // stores MASTER client_id, result, bHas_returned_result, vector_index, string:<data>
 std::vector<std::pair<int,std::pair<std::pair<int,bool>,std::pair<int,std::string>>>> clientData;
 
+// sends every item in clientData with has_returned_result == true to master,
+// master checks whether the result has been added or not
+void sendResultsToMaster(){
+  for(int i = 0; i < clientData.size(); ++i){
+    if(clientData.at(i).second.first.second){ // has_returned_result == true
+      CURL *curl;
+      CURLcode res;
+      std::string readBuffer;
+
+      curl = curl_easy_init();
+      if(curl) {
+          std::string host(hostnames[master_id]);
+          host.append("/?q=result");
+          host.append("&index="+std::to_string(clientData.at(i).second.second.first));
+          host.append("&result="+std::to_string(clientData.at(i).second.first.first));
+          curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+          curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+          curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+          curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+          res = curl_easy_perform(curl);
+          curl_easy_cleanup(curl);
+      }else{
+        fprintf(stderr,"Could not init curl\n");
+      }
+      if(res != 0){
+        fprintf(stderr,"curl sending results to master failed\n");
+      }
+    } 
+  }
+}
+
 std::string getProblemDataFromMaster(int clientID){
   CURL *curl;
   CURLcode res;
@@ -38,7 +69,8 @@ std::string getProblemDataFromMaster(int clientID){
   curl = curl_easy_init();
   if(curl) {
       std::string host(hostnames[master_id]);
-      host.append("/heartbeat");
+      host.append("/?q=getproblemdata");
+      host.append("&workerID="+std::to_string(worker_id));
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
@@ -58,7 +90,7 @@ std::string getProblemDataFromMaster(int clientID){
     clientData.push_back({clientID,{{0,false},{vIndex,sData}}});
     return sData;
   }else{
-    fprintf(stderr,"curl request failed\n");
+    fprintf(stderr,"curl getting problem data from master failed\n");
     return "";
   }
 }
