@@ -9,7 +9,7 @@
 #include <fstream>
 
 //edit this depending on device
-const std::string dataPath = "/home/user/Documents/DPS/A2/";
+const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
 
 bool stop_server = false;
 
@@ -98,11 +98,11 @@ struct HelloHandler : public Pistache::Http::Handler {
       }
       else
       {
-        rStream << line << "\n";
+        rStream << line.c_str() << "\n";
         rStream << Pistache::Http::flush;
-        rStream << localData[found].second.second << "\n";
+        rStream << localData[found].second.second.c_str() << "\n";
         rStream << Pistache::Http::flush;
-        rStream << localData[found+1].second.second << "\n";
+        rStream << localData[found+1].second.second.c_str() << "\n";
         rStream << Pistache::Http::flush;
         localData[found].first = 1;
         localData[found+1].first = 1;
@@ -205,6 +205,7 @@ void checkpoint_data(){
     csv_file << "\n";
   }
   csv_file.close();
+  fprintf(stderr,"snapshotting temp\n");
 
   csv_file.open(dataPath+"snapshot_distributed.csv");
   for(int i = 0; i < distributedData.size(); ++i){
@@ -214,6 +215,7 @@ void checkpoint_data(){
     csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
   }
   csv_file.close();
+  fprintf(stderr,"snapshotting ended\n");
 }
 
 void read_input_data(){
@@ -354,7 +356,7 @@ void ask_data(){
   return;
 }
 
-void send_result(int i){
+void send_result(int i){//TODO better variable name
   CURL *curl;
   CURLcode res;
   std::string readBuffer;
@@ -364,7 +366,7 @@ void send_result(int i){
       std::string tmp = "q=result&index=";
       tmp = tmp.append(std::to_string(storedResults[i].first));
       tmp = tmp.append("&result=");
-      tmp = tmp.append(std::to_string(storedResults[i].second)); //TODO 4 is arbitrary and magic, find optimum
+      tmp = tmp.append(std::to_string(storedResults[i].second));
       char *data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
@@ -457,8 +459,6 @@ int main(int argc, char **argv) {
       {
         send_result(i);
       }
-      
-      
     }
     
 
