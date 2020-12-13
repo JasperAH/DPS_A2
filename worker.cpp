@@ -25,7 +25,43 @@ int output = 0;
 int curIndex = 0;
 int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
 bool rollback = false;
-//using namespace Pistache;
+
+// WORKER stuff
+// stores MASTER client_id, result, bHas_returned_result, vector_index, string:<data>
+std::vector<std::pair<int,std::pair<std::pair<int,bool>,std::pair<int,std::string>>>> clientData;
+
+std::string getProblemDataFromMaster(int clientID){
+  CURL *curl;
+  CURLcode res;
+  std::string readBuffer;
+
+  curl = curl_easy_init();
+  if(curl) {
+      std::string host(hostnames[master_id]);
+      host.append("/heartbeat");
+      curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+      curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+      res = curl_easy_perform(curl);
+      curl_easy_cleanup(curl);
+  }else{
+    fprintf(stderr,"Could not init curl\n");
+    return false;
+  }
+  if(res == 0){
+    std::stringstream ss(readBuffer);
+    std::string line;
+    std::getline(ss,line));
+    int vIndex = atoi(line.c_str());
+    std::string sData = ss.str();
+    clientData.push_back({clientID,{{0,false},{vIndex,sData}}});
+    return sData;
+  }else{
+    fprintf(stderr,"curl request failed\n");
+    return "";
+  }
+}
 
 struct HelloHandler : public Pistache::Http::Handler {
   HTTP_PROTOTYPE(HelloHandler);
@@ -44,11 +80,15 @@ struct HelloHandler : public Pistache::Http::Handler {
     if(master_id == worker_id && request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Post){
       int res = atoi(request.query().get("result").get().c_str());
       int ind = atoi(request.query().get("index").get().c_str());
-      output += res;
-      distributedData.at(ind).first.second = true;
+      if(distributedData.at(ind).first.second == false){
+        output += res;
+        distributedData.at(ind).first.second = true;
+      }
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>
+    // returns vector_id in the first line
+    // other lines are data in csv format
     if(master_id == worker_id && request.query().get("q").get() == "getproblemdata" && request.method() == Pistache::Http::Method::Post){
       int wID = atoi(request.query().get("workerID").get().c_str());
     //}
@@ -311,7 +351,9 @@ int main(int argc, char **argv) {
     }
   }
   fprintf(stderr,"stopping server\n");
-  checkpoint_data();
-  fprintf(stdout, "result: %d\n",output);
+  if(master_id == worker_id){
+    checkpoint_data();
+    fprintf(stdout, "result: %d\n",output);
+  }
   free(hostnames);
 }
