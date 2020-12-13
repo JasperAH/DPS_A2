@@ -30,9 +30,15 @@ bool rollback = false;
 // stores MASTER client_id, result, bHas_returned_result, vector_index, string:<data>
 std::vector<std::pair<int,std::pair<std::pair<int,bool>,std::pair<int,std::string>>>> clientData;
 
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
 // sends every item in clientData with has_returned_result == true to master,
 // master checks whether the result has been added or not
-void sendResultsToMaster(){
+bool sendResultsToMaster(){
   for(int i = 0; i < clientData.size(); ++i){
     if(clientData.at(i).second.first.second){ // has_returned_result == true
       CURL *curl;
@@ -42,7 +48,7 @@ void sendResultsToMaster(){
       curl = curl_easy_init();
       if(curl) {
           std::string host(hostnames[master_id]);
-          host.append("/?q=result");
+          host.append("/?q=mResult");
           host.append("&index="+std::to_string(clientData.at(i).second.second.first));
           host.append("&result="+std::to_string(clientData.at(i).second.first.first));
           curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
@@ -53,12 +59,15 @@ void sendResultsToMaster(){
           curl_easy_cleanup(curl);
       }else{
         fprintf(stderr,"Could not init curl\n");
+        return false;
       }
       if(res != 0){
         fprintf(stderr,"curl sending results to master failed\n");
+        return false;
       }
     } 
   }
+  return true;
 }
 
 std::string getProblemDataFromMaster(int clientID){
@@ -79,14 +88,16 @@ std::string getProblemDataFromMaster(int clientID){
       curl_easy_cleanup(curl);
   }else{
     fprintf(stderr,"Could not init curl\n");
-    return false;
+    return "";
   }
   if(res == 0){
     std::stringstream ss(readBuffer);
     std::string line;
-    std::getline(ss,line));
+    std::getline(ss,line);
     int vIndex = atoi(line.c_str());
-    std::string sData = ss.str();
+    std::string sData;
+    while(std::getline(ss,line))
+      sData.append(line+"\n");
     clientData.push_back({clientID,{{0,false},{vIndex,sData}}});
     return sData;
   }else{
@@ -98,6 +109,21 @@ std::string getProblemDataFromMaster(int clientID){
 struct HelloHandler : public Pistache::Http::Handler {
   HTTP_PROTOTYPE(HelloHandler);
   void onRequest(const Pistache::Http::Request& request, Pistache::Http::ResponseWriter writer) override{
+    if(request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Get){
+      bool sendRes = sendResultsToMaster();
+      if(sendRes){
+        writer.send(Pistache::Http::Code::Ok); // return OK
+      }else{
+        writer.send(Pistache::Http::Code::Internal_Server_Error);
+      }
+    }
+    if(request.query().get("q").get() == "getproblem" && request.method() == Pistache::Http::Method::Get){
+      int clientID = atoi(request.query().get("clientID").get().c_str());
+      std::string r = getProblemDataFromMaster(clientID);
+      Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok); // open datastream for response
+      rStream << r.c_str();
+      rStream << Pistache::Http::ends;
+    }
     if(request.resource().compare("/get_id") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, std::to_string(worker_id)); // return own ID for master election
     }
@@ -109,7 +135,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
-    if(master_id == worker_id && request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Post){
+    if(master_id == worker_id && request.query().get("q").get() == "mResult" && request.method() == Pistache::Http::Method::Get){
       int res = atoi(request.query().get("result").get().c_str());
       int ind = atoi(request.query().get("index").get().c_str());
       if(distributedData.at(ind).first.second == false){
@@ -121,7 +147,7 @@ struct HelloHandler : public Pistache::Http::Handler {
     // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>
     // returns vector_id in the first line
     // other lines are data in csv format
-    if(master_id == worker_id && request.query().get("q").get() == "getproblemdata" && request.method() == Pistache::Http::Method::Post){
+    if(master_id == worker_id && request.query().get("q").get() == "getproblemdata" && request.method() == Pistache::Http::Method::Get){
       int wID = atoi(request.query().get("workerID").get().c_str());
     //}
     //if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
@@ -150,12 +176,6 @@ struct HelloHandler : public Pistache::Http::Handler {
     writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
   }
 };
-
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    ((std::string*)userp)->append((char*)contents, size * nmemb);
-    return size * nmemb;
-}
 
 bool sendHeartBeat(){
   CURL *curl;
@@ -242,6 +262,7 @@ void read_input_data(){
   csv_file.close();
 
   if(rollback){
+    fprintf(stderr,"reading distributed snapshot data from file\n");
     csv_file.open(dataPath+"snapshot_distributed.csv");
     if(csv_file.is_open()){
       while(std::getline(csv_file,line)){
@@ -261,7 +282,11 @@ void read_input_data(){
 
         distributedData.push_back({{wid,has_returned},{start_ind,end_ind}});
       }
-      curIndex = distributedData.at(distributedData.size()-1).second.second;
+      if(distributedData.size() > 0){
+        curIndex = distributedData.at(distributedData.size()-1).second.second;
+      } else{
+        curIndex = 0;
+      }
     }
   }
   csv_file.close();
@@ -322,7 +347,7 @@ int main(int argc, char **argv) {
   // INIT pistache
   Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
 
-  auto opts = Pistache::Http::Endpoint::options().threads(1);
+  auto opts = Pistache::Http::Endpoint::options().threads(8);
   Pistache::Http::Endpoint server(addr);
   server.init(opts);
   server.setHandler(std::make_shared<HelloHandler>());
@@ -332,8 +357,6 @@ int main(int argc, char **argv) {
 
   // INIT master
   elect_master();
-
-
   checkpoint_data();
 
 
@@ -372,7 +395,7 @@ int main(int argc, char **argv) {
     }
 
     // check if we're done when all data has been distributed
-    if(master_id == worker_id && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
+    if(master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
       bool done = true;
       for(int i = 0; i < distributedData.size(); ++i){
         if(distributedData.at(i).first.second == false)
