@@ -20,6 +20,10 @@ char** hostnames;
 
 int * workload;
 
+std::vector<std::pair<int, std::pair<int, std::string>>> localData; //clientID, line, data
+std::vector<std::pair<int,int>> storedResults; //lineIndex, Result
+static int MINIMUM_STORE = 10; //TODO find optimum
+
 static int MAXCLIENTS = 5; //TODO find optimum
 
 // MASTER stuff
@@ -73,6 +77,39 @@ struct HelloHandler : public Pistache::Http::Handler {
     if(request.resource().compare("/get_worker") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, assignWorker()); // return hostname of assigned worker
     }
+    if(request.resource().compare("/get_problem") == 0 && request.method() == Pistache::Http::Method::Get){
+      Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok);
+      std::string data;
+      std::string line;
+      int found = -1;
+      for (int i = 0; i < localData.size(); i++)
+      {
+        if (localData[i].first == -1)
+        {
+          data = localData[i].second.second;
+          line = localData[i].second.first;
+          found = true;
+          break;
+        }
+      }
+      if (found == -1)
+      {
+        /* TODO send error that data was not available ofzo, mss meer data ophalen?, mss niet ivm blocking */
+      }
+      else
+      {
+        rStream << line << "\n";
+        rStream << Pistache::Http::flush;
+        rStream << localData[found].second.second << "\n";
+        rStream << Pistache::Http::flush;
+        rStream << localData[found+1].second.second << "\n";
+        rStream << Pistache::Http::flush;
+        localData[found].first = 1;
+        localData[found+1].first = 1;
+        rStream << Pistache::Http::ends; // also flushes and ends the stream
+        writer.send(Pistache::Http::Code::Ok);
+      }
+    }
     if(request.resource().compare("/stop") == 0 && request.method() == Pistache::Http::Method::Get){
       stop_server = true;
       writer.send(Pistache::Http::Code::Ok); // return OK
@@ -85,9 +122,17 @@ struct HelloHandler : public Pistache::Http::Handler {
       distributedData.at(ind).first.second = true;
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
-    // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>
+    // usage: <host>:<port>/?q=resultClient\&index=<vector_index>\&result=<result>
+    if(request.query().get("q").get() == "resultClient" && request.method() == Pistache::Http::Method::Post){
+      int res = atoi(request.query().get("result").get().c_str());
+      int ind = atoi(request.query().get("index").get().c_str());
+      storedResults.push_back({ind, res});
+      writer.send(Pistache::Http::Code::Ok); // return OK
+    }
+    // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>\&datasize=<datasize>
     if(master_id == worker_id && request.query().get("q").get() == "getproblemdata" && request.method() == Pistache::Http::Method::Post){
       int wID = atoi(request.query().get("workerID").get().c_str());
+      int datasize = atoi(request.query().get("datasize").get().c_str());
     //}
     //if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
       Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok); // open datastream for response
@@ -95,7 +140,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       rStream << std::to_string(distributedData.size()).c_str() << "\n";
       rStream << Pistache::Http::flush;
       // return data as CSV, amount is controlled by getProblemDataSize
-      int maxIndex = ((curIndex + getProblemDataSize) > inputData.at(0).size()) ? inputData.at(0).size() : (curIndex + getProblemDataSize);
+      int maxIndex = ((curIndex + datasize) > inputData.at(0).size()) ? inputData.at(0).size() : (curIndex + datasize);
       for(int i = curIndex; i < maxIndex; ++i){
         std::string line = "";
         for(int j = 0; j < inputData.size(); ++j){
@@ -107,8 +152,8 @@ struct HelloHandler : public Pistache::Http::Handler {
       }     
 
       // TODO vervang 0 met worker_id en maak deze if een POST met request.query()
-      distributedData.push_back({{wID,false},{curIndex,curIndex+getProblemDataSize}});
-      curIndex += getProblemDataSize;
+      distributedData.push_back({{wID,false},{curIndex,curIndex+datasize}});
+      curIndex += datasize;
 
       rStream << Pistache::Http::ends; // also flushes and ends the stream
     }
@@ -269,6 +314,77 @@ void elect_master(){
     read_input_data();
 }
 
+void ask_data(){
+  CURL *curl;
+  CURLcode res;
+  std::string readBuffer;
+
+  curl = curl_easy_init();
+  if(curl) {
+      std::string host(hostnames[master_id]);
+      std::string tmp = "q=getgetproblemdata&workerID=";
+      tmp = tmp.append(std::to_string(worker_id));
+      tmp = tmp.append("&datasize=");
+      tmp = tmp.append(std::to_string((MINIMUM_STORE - localData.size()) + 4)); //TODO 4 is arbitrary and magic, find optimum
+      char *data = &tmp[0];
+      curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+      curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+      curl_easy_setopt(curl, CURLOPT_POST, 1);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+      res = curl_easy_perform(curl);
+      curl_easy_cleanup(curl);
+      
+      if(res == 0){ // we got a response
+        std::stringstream lineStream(readBuffer);
+        std::string row;
+        std::vector<std::string> lines;
+        std::getline(lineStream, row, '\n');
+        int lineIndex = std::stoi(row);
+        while (std::getline(lineStream, row, '\n'))
+        {
+            localData.push_back({-1,{lineIndex,row}});
+            lineIndex++;
+        }
+      }
+  }else{
+    fprintf(stderr,"Could not init curl\n");
+  }
+  return;
+}
+
+void send_result(int i){
+  CURL *curl;
+  CURLcode res;
+  std::string readBuffer;
+  curl = curl_easy_init();
+  if(curl) {
+      std::string host(hostnames[master_id]);
+      std::string tmp = "q=result&index=";
+      tmp = tmp.append(std::to_string(storedResults[i].first));
+      tmp = tmp.append("&result=");
+      tmp = tmp.append(std::to_string(storedResults[i].second)); //TODO 4 is arbitrary and magic, find optimum
+      char *data = &tmp[0];
+      curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+      curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+      curl_easy_setopt(curl, CURLOPT_POST, 1);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+      res = curl_easy_perform(curl);
+      curl_easy_cleanup(curl);
+      
+      if(res == 0){ // we got a response
+        storedResults.erase( storedResults.begin() + i );
+      }
+  }else{
+    fprintf(stderr,"Could not init curl\n");
+  }
+  return;
+
+}
+
 int main(int argc, char **argv) {
   // parse input
   if (argc < 3){
@@ -330,6 +446,21 @@ int main(int argc, char **argv) {
       }
       heartbeat_time = std::chrono::system_clock::now();
     }
+
+    if (localData.size() < MINIMUM_STORE)
+    {
+      ask_data();
+    }
+
+    if(storedResults.size()>0){
+      for (int i = storedResults.size()-1; i >= 0; i--)//TODO dit moet zolang de post maar 1 result per keer kan verwerken
+      {
+        send_result(i);
+      }
+      
+      
+    }
+    
 
     // SNAPSHOT periodically
     diff = std::chrono::system_clock::now() - snapshot_time;
