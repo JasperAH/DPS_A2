@@ -73,6 +73,7 @@ void postResultInternally(){ //TODO
 struct HelloHandler : public Pistache::Http::Handler {
   HTTP_PROTOTYPE(HelloHandler);
   void onRequest(const Pistache::Http::Request& request, Pistache::Http::ResponseWriter writer) override{
+    std::cout << "aangeroepen" << std::endl;
     if(request.resource().compare("/get_id") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, std::to_string(worker_id)); // return own ID for master election
     }
@@ -123,7 +124,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
-    if(master_id == worker_id && request.query().get("q").get() == "mResult" && request.method() == Pistache::Http::Method::Get){
+    if(master_id == worker_id && request.query().get("q").get() == "result" && request.method() == Pistache::Http::Method::Get){
       int res = atoi(request.query().get("result").get().c_str());
       int ind = atoi(request.query().get("index").get().c_str());
       if(distributedData.at(ind).first.second == false){
@@ -145,6 +146,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       int datasize = atoi(request.query().get("datasize").get().c_str());
     //}
     //if(master_id == worker_id && request.resource().compare("/getproblemdata") == 0 && request.method() == Pistache::Http::Method::Get){
+      std::cout << "aangeroepen worker: " << wID << ", Datasize: "<< datasize << std::endl;
       Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok); // open datastream for response
       // first send index in vector:
       rStream << std::to_string(distributedData.size()).c_str() << "\n";
@@ -209,7 +211,6 @@ void checkpoint_data(){
     csv_file << "\n";
   }
   csv_file.close();
-  fprintf(stderr,"snapshotting temp\n");
 
   csv_file.open(dataPath+"snapshot_distributed.csv");
   for(int i = 0; i < distributedData.size(); ++i){
@@ -219,7 +220,6 @@ void checkpoint_data(){
     csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
   }
   csv_file.close();
-  fprintf(stderr,"snapshotting ended\n");
 }
 
 void read_input_data(){
@@ -333,14 +333,15 @@ void ask_data(){
   curl = curl_easy_init();
   if(curl) {
       std::string host(hostnames[master_id]);
-      std::string tmp = "q=getgetproblemdata&workerID=";
+      std::string tmp = "q=getproblemdata&workerID=";
       tmp = tmp.append(std::to_string(worker_id));
       tmp = tmp.append("&datasize=");
       tmp = tmp.append(std::to_string((MINIMUM_STORE - localData.size()) + 4)); //TODO 4 is arbitrary and magic, find optimum
       char *data = &tmp[0];
+      std::cout << data << '\n';
+      std::cout << tmp << std::endl;
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
-      curl_easy_setopt(curl, CURLOPT_POST, 1);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
@@ -349,9 +350,11 @@ void ask_data(){
       
       if(res == 0){ // we got a response
         std::stringstream lineStream(readBuffer);
+        std::cout << "ReadBuffer: " << readBuffer << std::endl;
         std::string row;
         std::vector<std::string> lines;
         std::getline(lineStream, row, '\n');
+        std::cout << "row: "<< row << std::endl;
         int lineIndex = std::stoi(row);
         while (std::getline(lineStream, row, '\n'))
         {

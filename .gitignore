@@ -38,5 +38,10 @@ dummyClient*
 client
 worker
 
+# Libraries
 pistache
 pistache/*
+
+
+# Data Files
+*.csv
