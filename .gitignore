@@ -34,6 +34,7 @@
 .vscode
 .vscode/*
 
+dummyClient*
 client
 worker
 
