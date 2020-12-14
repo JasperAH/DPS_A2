@@ -81,13 +81,18 @@ int getProblem(std::string host){ //TODO
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
-        std::cout << "readBuffer: " << readBuffer << std::endl;
-        if(res == 0){ // we got a response TODO add response codes or something for each error case
+        if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
             std::ofstream out("tmp_data.csv"); //TODO magic name
             out << readBuffer;
             out.close();
             return 1;
         }
+        else if(res == 503 || readBuffer[0] == 'X') //Pistache::Http::Code::Service_Unavailable
+        {
+            std::cout << "Data unavailable" << std::endl;
+            return -1;
+        }
+        
     }else{
         fprintf(stderr,"Could not init curl\n");
         return 0;
@@ -105,7 +110,6 @@ int computeProblem(int &lineNumber){
     std::string line;
     if (file.is_open()) {
         std::getline(file, line);
-        std::cout << "line: " << line << std::endl;
         lineNumber = std::stoi(line);
         std::vector<std::vector<int>> data;
         while (std::getline(file, line))
@@ -115,7 +119,6 @@ int computeProblem(int &lineNumber){
             std::vector<int> row;
             while (std::getline(lineStream, val, 'c'))
             {
-                std::cout << "val: " << val << std::endl;
                 row.push_back(std::stoi(val));
             }
             data.push_back(row);
@@ -146,7 +149,6 @@ void sendResult(std::string host, int result, int lineNumber){
         host = host.append("&result=");
         host = host.append(std::to_string(result)); //TODO 4 is arbitrary and magic, find optimum
         char *data = &tmp[0];
-        std::cout << "host: " << host << std::endl;
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_POST, 1);
@@ -163,6 +165,70 @@ void sendResult(std::string host, int result, int lineNumber){
         fprintf(stderr,"Could not init curl\n");
     }
     return;
+}
+
+void checkout(std::string host, int localID){
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    curl = curl_easy_init();
+    if(curl) {
+        host = host.append("/?q=checkout&clientID=");
+        host = host.append(std::to_string(localID));
+        curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if(res == 0){ // we got a response TODO add response codes or something for each error case
+            std::cout << "Succesfull checkout" << std::endl;
+        }
+        else
+        {
+            std::cout << "checkout failure";
+        }
+    }else{
+        fprintf(stderr,"Could not init curl\n");
+    }
+    return;
+}
+
+int signup(std::string host){
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    curl = curl_easy_init();
+    if(curl) {
+        host.append("/signup");
+        curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if(res == 0){ // we got a response TODO add response codes or something for each error case
+            if(readBuffer == "error - No available client spot"){
+                return -1;
+            }
+            else{
+                std::cout << "Succesfull signup" << std::endl;
+                return stoi(readBuffer);
+            }
+        }
+        else
+        {
+            std::cout << "signup failure " << std::endl;
+        }
+    }else{
+        fprintf(stderr,"Could not init curl\n");
+    }
+    return -1;
 }
 
 int main(int argc, char **argv)
@@ -193,13 +259,33 @@ int main(int argc, char **argv)
         std::cout << worker << std::endl;
     }
 
-    getProblem(worker);
-
-    int lineNumber;
-
-    int result = computeProblem(lineNumber); //TODO do somethin with error (result == -1)
-
-    sendResult(worker, result, lineNumber);
+    int clientID = signup(worker);
+    int x = 0;
+    while (clientID < 0 && x < 5) // signup failed
+    {
+        clientID = signup(worker);
+        x++;
+    }
+    if (x == 5)
+    {
+        std::cout << "No viable connection was made, exit program" << std::endl;
+        return -1;
+    }
     
+    
+
+    if(getProblem(worker) == -1){
+        checkout(worker, clientID);
+        return -1;
+    }
+    else{
+        int lineNumber;
+        int result = computeProblem(lineNumber); //TODO do somethin with error (result == -1)
+        sendResult(worker, result, lineNumber);
+        checkout(worker, clientID);
+    }
+
+    
+
     return 0;
 }
