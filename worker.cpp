@@ -329,6 +329,32 @@ void elect_master(){
     read_input_data();
 }
 
+void stop_servers(){
+  fprintf(stderr,"Stopping other servers\n");
+
+  int lowest_id = worker_id;
+  CURL *curl;
+  CURLcode res;
+  std::string readBuffer;
+  for(int i = 0; i < n_workers; ++i){
+    if(i != worker_id){
+      curl = curl_easy_init();
+      if(curl) {
+          std::string host(hostnames[i]);
+          host.append("/stop");
+          curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+          curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+          curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+          curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+          res = curl_easy_perform(curl);
+          curl_easy_cleanup(curl);
+      }else{
+        fprintf(stderr,"Could not init curl to stop servers\n");
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   // parse input
   if (argc < 3){
@@ -357,7 +383,7 @@ int main(int argc, char **argv) {
 
   // INIT master
   elect_master();
-  checkpoint_data();
+  if(master_id == worker_id) checkpoint_data();
 
 
   // INIT clocks & heartbeat
@@ -409,6 +435,7 @@ int main(int argc, char **argv) {
   if(master_id == worker_id){
     checkpoint_data();
     fprintf(stdout, "result: %d\n",output);
+    stop_servers();
   }
   free(hostnames);
 }
