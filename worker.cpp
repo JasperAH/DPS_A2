@@ -152,7 +152,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       }
 
       // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
-      if(master_id == worker_id && request.resource().compare("/?q=") && request.method() == Pistache::Http::Method::Get){
+      if(master_id == worker_id && request.resource().compare("/?q=") && request.method() == Pistache::Http::Method::Post){
         if (request.query().get("q").get() == "result")
         {
           int res = atoi(request.query().get("result").get().c_str());
@@ -391,12 +391,13 @@ void ask_data(){ // call using <host>:<port>/?q=getproblemdata\&workerID=<worker
   curl = curl_easy_init();
   if(curl) {
       std::string host(hostnames[master_id]);
-      //std::string tmp = "q=getproblemdata&workerID=";
-      host = host.append("/?q=getproblemdata&workerID=");
-      host = host.append(std::to_string(worker_id));
-      host = host.append("&datasize=");
-      host = host.append(std::to_string((MINIMUM_STORE - localData.size()) + 4)); //TODO 4 is arbitrary and magic, find optimum
-      char *data = &host[0];
+      std::string tmp = "q=getproblemdata&workerID=";
+      host.append("/?");
+      tmp.append(std::to_string(worker_id));
+      tmp.append("&datasize=");
+      tmp.append(std::to_string((MINIMUM_STORE - localData.size()) + 4)); //TODO 4 is arbitrary and magic, find optimum
+      host.append(tmp);
+      char* data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
@@ -436,13 +437,16 @@ int send_result(int i){//TODO better variable name
   if(curl) {
       std::string host(hostnames[master_id]);
       std::string tmp = "q=result&index=";
-      host = host.append("/?q=result&index=");
-      host = host.append(std::to_string(storedResults[i].first));
-      host = host.append("&result=");
-      host = host.append(std::to_string(storedResults[i].second));
+      host.append("/?");
+      tmp.append(std::to_string(storedResults[i].first));
+      tmp.append("&result=");
+      tmp.append(std::to_string(storedResults[i].second));
+      host.append(tmp);
+      char* data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
       curl_easy_setopt(curl, CURLOPT_POST, 1);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
       res = curl_easy_perform(curl);
@@ -469,13 +473,17 @@ void updateNumClients(){ // call using <host>:<port>/?q=numClientsChange\&worker
   if(curl) {
       int freezeValue = numLocalClients;
       std::string host(hostnames[master_id]);
-      host = host.append("/?q=numClientsChange&workerID=");
-      host = host.append(std::to_string(worker_id));
-      host = host.append("&numLocalClients=");
-      host = host.append(std::to_string(freezeValue));
+      std::string tmp = "q=numClientsChange&workerID=";
+      host.append("/?");
+      tmp.append(std::to_string(worker_id));
+      tmp.append("&numLocalClients=");
+      tmp.append(std::to_string(freezeValue));
+      host.append(tmp);
+      char* data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
       curl_easy_setopt(curl, CURLOPT_POST, 1);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
       res = curl_easy_perform(curl);

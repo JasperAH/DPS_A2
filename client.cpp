@@ -143,13 +143,17 @@ void sendResult(std::string host, int result, int lineNumber){
     std::string readBuffer;
     curl = curl_easy_init();
     if(curl) {
-        host = host.append("/?q=uploadFromClient&index=");
-        host = host.append(std::to_string(lineNumber));
-        host = host.append("&result=");
-        host = host.append(std::to_string(result));
+        std::string tmp = "q=uploadFromClient&index=";
+        host.append("/?");
+        tmp.append(std::to_string(lineNumber));
+        tmp.append("&result=");
+        tmp.append(std::to_string(result));
+        host.append(tmp);
+        char* data = &tmp[0];
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
@@ -171,11 +175,15 @@ void checkout(std::string host, int localID){
 
     curl = curl_easy_init();
     if(curl) {
-        host = host.append("/?q=checkout&clientID=");
-        host = host.append(std::to_string(localID));
+        std::string tmp = "q=checkout&clientID=";
+        host.append("/?");
+        tmp.append(std::to_string(localID));
+        host.append(tmp);
+        char* data = &tmp[0];
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
