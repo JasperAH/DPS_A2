@@ -81,7 +81,7 @@ int getProblem(std::string host){ //TODO
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
-
+        std::cout << "readBuffer: " << readBuffer << std::endl;
         if(res == 0){ // we got a response TODO add response codes or something for each error case
             std::ofstream out("tmp_data.csv"); //TODO magic name
             out << readBuffer;
@@ -105,6 +105,7 @@ int computeProblem(int &lineNumber){
     std::string line;
     if (file.is_open()) {
         std::getline(file, line);
+        std::cout << "line: " << line << std::endl;
         lineNumber = std::stoi(line);
         std::vector<std::vector<int>> data;
         while (std::getline(file, line))
@@ -114,6 +115,7 @@ int computeProblem(int &lineNumber){
             std::vector<int> row;
             while (std::getline(lineStream, val, 'c'))
             {
+                std::cout << "val: " << val << std::endl;
                 row.push_back(std::stoi(val));
             }
             data.push_back(row);
@@ -138,11 +140,13 @@ void sendResult(std::string host, int result, int lineNumber){
     std::string readBuffer;
     curl = curl_easy_init();
     if(curl) {
-        std::string tmp = "q=resultClient&index=";
-        tmp = tmp.append(std::to_string(lineNumber));
-        tmp = tmp.append("&result=");
-        tmp = tmp.append(std::to_string(result)); //TODO 4 is arbitrary and magic, find optimum
+        std::string tmp = "q=uploadFromClient&index=";
+        host = host.append("/?q=uploadFromClient&index=");
+        host = host.append(std::to_string(lineNumber));
+        host = host.append("&result=");
+        host = host.append(std::to_string(result)); //TODO 4 is arbitrary and magic, find optimum
         char *data = &tmp[0];
+        std::cout << "host: " << host << std::endl;
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_POST, 1);
