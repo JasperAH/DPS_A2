@@ -140,17 +140,19 @@ struct HelloHandler : public Pistache::Http::Handler {
     }
     else {
       // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>
-      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q==")){ //TODO deassign worker in master so more clients can be assigned
+      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){ //TODO deassign worker in master so more clients can be assigned
         if (request.query().get("q").get() == "uploadFromClient"){
+          std::cout << "in uploadfromclient?" << std::endl;
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           storedResults.push_back({ind, res});
+          std::cout << "stored:" << storedResults[storedResults.size()-1].first << ", " << storedResults[storedResults.size()-1].second << std::endl;
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
 
       // usage: <host>:<port>/?q=result\&index=<vector_index>\&result=<result>
-      if(master_id == worker_id && request.resource().compare("/?q==") && request.method() == Pistache::Http::Method::Get){
+      if(master_id == worker_id && request.resource().compare("/?q=") && request.method() == Pistache::Http::Method::Get){
         if (request.query().get("q").get() == "result")
         {
           int res = atoi(request.query().get("result").get().c_str());
@@ -158,6 +160,7 @@ struct HelloHandler : public Pistache::Http::Handler {
           if(distributedData.at(ind).first.second == false){
             output += res;
             distributedData.at(ind).first.second = true;
+            distributedData.at(ind+1).first.second = true;
             std::cout << "data ontvangen" << std::endl;
           }
           writer.send(Pistache::Http::Code::Ok); // return OK
@@ -165,7 +168,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       }
 
       // call using <host>:<port>/?q=numClientsChange\&workerID=<worker_id>\&numLocalClients=<numLocalClients>
-      if(master_id == worker_id &&request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q==")){
+      if(master_id == worker_id &&request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "numClientsChange"){
           int wID = atoi(request.query().get("workerID").get().c_str());
           int numLocal = atoi(request.query().get("numLocalClients").get().c_str());
@@ -175,7 +178,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       }
 
       // call using <host>:<port>/?q=checkout\&clientID=<client_id>
-      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q==")){
+      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "checkout"){
           numLocalClients--;
           int cID = atoi(request.query().get("clientID").get().c_str());
@@ -184,7 +187,7 @@ struct HelloHandler : public Pistache::Http::Handler {
         }
       }
       // call using <host>:<port>/?q=getproblemdata\&workerID=<worker_id>\&datasize=<datasize>
-      if(master_id == worker_id && request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q==")){
+      if(master_id == worker_id && request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "getproblemdata"){
           int wID = atoi(request.query().get("workerID").get().c_str());
           int datasize = atoi(request.query().get("datasize").get().c_str());
@@ -433,7 +436,7 @@ int send_result(int i){//TODO better variable name
   if(curl) {
       std::string host(hostnames[master_id]);
       std::string tmp = "q=result&index=";
-      host = host.append("/?q==result&index=");
+      host = host.append("/?q=result&index=");
       host = host.append(std::to_string(storedResults[i].first));
       host = host.append("&result=");
       host = host.append(std::to_string(storedResults[i].second));
@@ -573,6 +576,7 @@ int main(int argc, char **argv) {
         {
           if(localData[y].second.first == deletedLines[x]){
             localData.erase(localData.begin() + y );
+            localData.erase(localData.begin() + y + 1 );
             deletedLines.erase(deletedLines.begin() + x);
           }
         } 
@@ -582,6 +586,9 @@ int main(int argc, char **argv) {
     if (numLocalClientsServer != numLocalClients)
     {
       updateNumClients();
+      for (auto i: storedResults)
+        std::cout << i.first << ", " << i.second << std::endl;
+      
     }
     
 

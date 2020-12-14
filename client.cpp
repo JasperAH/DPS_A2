@@ -117,7 +117,7 @@ int computeProblem(int &lineNumber){
             std::stringstream lineStream(line);
             std::string val;
             std::vector<int> row;
-            while (std::getline(lineStream, val, 'c'))
+            while (std::getline(lineStream, val, ','))
             {
                 row.push_back(std::stoi(val));
             }
@@ -143,16 +143,13 @@ void sendResult(std::string host, int result, int lineNumber){
     std::string readBuffer;
     curl = curl_easy_init();
     if(curl) {
-        std::string tmp = "q=uploadFromClient&index=";
         host = host.append("/?q=uploadFromClient&index=");
         host = host.append(std::to_string(lineNumber));
         host = host.append("&result=");
-        host = host.append(std::to_string(result)); //TODO 4 is arbitrary and magic, find optimum
-        char *data = &tmp[0];
+        host = host.append(std::to_string(result));
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
         curl_easy_setopt(curl, CURLOPT_POST, 1);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
