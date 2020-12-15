@@ -305,15 +305,16 @@ void checkpoint_data(){
     csv_file << "\n";
   }
   csv_file.close();
-
-  csv_file.open(dataPath+"snapshot_distributed.csv");
-  for(int i = 0; i < distributedData.size(); ++i){
-    csv_file << std::to_string(distributedData.at(i).first.first) << ",";
-    csv_file << std::to_string(distributedData.at(i).first.second) << ",";
-    csv_file << std::to_string(distributedData.at(i).second.first) << ",";
-    csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+  if(distributedData.size()>0){
+    csv_file.open(dataPath+"snapshot_distributed.csv");
+    for(int i = 0; i < distributedData.size(); ++i){
+      csv_file << std::to_string(distributedData.at(i).first.first) << ",";
+      csv_file << std::to_string(distributedData.at(i).first.second) << ",";
+      csv_file << std::to_string(distributedData.at(i).second.first) << ",";
+      csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+    }
+    csv_file.close();
   }
-  csv_file.close();
 }
 
 void read_input_data(){
@@ -378,8 +379,8 @@ void read_input_data(){
         curIndex = 0;
       }
     }
+    csv_file.close();
   }
-  csv_file.close();
 }
 
 void elect_master(){
@@ -537,6 +538,34 @@ void updateNumClients(){ // call using <host>:<port>/?q=numClientsChange\&worker
   return;
 }
 
+
+void stop_servers(){
+  fprintf(stderr,"Stopping other servers\n");
+
+  int lowest_id = worker_id;
+  CURL *curl;
+  CURLcode res;
+  std::string readBuffer;
+  for(int i = 0; i < n_workers; ++i){
+    if(i != worker_id){
+      curl = curl_easy_init();
+      if(curl) {
+          std::string host(hostnames[i]);
+          host.append("/stop");
+          curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+          curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+          curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+          curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+          res = curl_easy_perform(curl);
+          curl_easy_cleanup(curl);
+      }else{
+        fprintf(stderr,"Could not init curl to stop servers\n");
+      }
+    }
+  }
+
+}
+
 int main(int argc, char **argv) {
   // parse input
   if (argc < 3){
@@ -575,7 +604,7 @@ int main(int argc, char **argv) {
 
   // INIT master
   elect_master();
-  checkpoint_data();
+  if(master_id == worker_id) checkpoint_data();
 
 
   // INIT clocks & heartbeat
@@ -691,7 +720,7 @@ int main(int argc, char **argv) {
     }
 
     // check if we're done when all data has been distributed
-    if(master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
+    if(!stop_server && master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
       bool done = true;
       for(int i = 0; i < distributedData.size(); ++i){
         if(distributedData.at(i).first.second == false)
@@ -705,6 +734,7 @@ int main(int argc, char **argv) {
   if(master_id == worker_id){
     checkpoint_data();
     fprintf(stdout, "result: %d\n",output);
+    stop_servers();
   }
   free(hostnames);
 }
