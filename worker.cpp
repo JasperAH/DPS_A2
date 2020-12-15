@@ -110,11 +110,9 @@ struct HelloHandler : public Pistache::Http::Handler {
           break;
         }
       }
-      std::cout << "found: " << found << std::endl;
       if (found == -1)
       {
         std::string tmp("X");
-        std::cout << "ja echt" << std::endl;
         rStream << tmp.c_str() << "\n";
         //rStream << std::to_string(Pistache::Http::Code::Service_Unavailable).c_str();
         rStream << Pistache::Http::ends;
@@ -142,11 +140,9 @@ struct HelloHandler : public Pistache::Http::Handler {
       // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){ //TODO deassign worker in master so more clients can be assigned
         if (request.query().get("q").get() == "uploadFromClient"){
-          std::cout << "in uploadfromclient?" << std::endl;
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           storedResults.push_back({ind, res});
-          std::cout << "stored:" << storedResults[storedResults.size()-1].first << ", " << storedResults[storedResults.size()-1].second << std::endl;
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -161,7 +157,6 @@ struct HelloHandler : public Pistache::Http::Handler {
             output += res;
             distributedData.at(ind).first.second = true;
             distributedData.at(ind+1).first.second = true;
-            std::cout << "data ontvangen" << std::endl;
           }
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
@@ -215,10 +210,11 @@ struct HelloHandler : public Pistache::Http::Handler {
               }
               rStream << line.c_str() << "\n";
               rStream << Pistache::Http::flush; //optional? should ensure sending data more often
+              distributedData.push_back({{wID,false},{i,i+(getProblemDataSize-1)}});
+              
             }     
 
             // TODO vervang 0 met worker_id en maak deze if een POST met request.query()
-            distributedData.push_back({{wID,false},{curIndex,curIndex+datasize}});
             curIndex += maxIndex - curIndex;
 
             rStream << Pistache::Http::ends; // also flushes and ends the stream
@@ -422,6 +418,7 @@ void ask_data(){ // call using <host>:<port>/?q=getproblemdata\&workerID=<worker
             localData.push_back({-1,{lineIndex,row}});
             lineIndex++;
         }
+        
       }
   }else{
     fprintf(stderr,"Could not init curl\n");
@@ -454,7 +451,6 @@ int send_result(int i){//TODO better variable name
       
       if(res == 0){ // we got a response
         int lineNumber = storedResults[i].first;
-        std::cout << "uploaded result [line, res]: " << lineNumber << ", " << storedResults[i].second << std::endl;
         storedResults.erase( storedResults.begin() + i );
         return lineNumber;
       }
@@ -491,13 +487,13 @@ void updateNumClients(){ // call using <host>:<port>/?q=numClientsChange\&worker
       
       if(res == 0){ // we got a response
         numLocalClientsServer = freezeValue;
-        std::cout << "number of clients updated in master node" << std::endl;
+        fprintf(stderr,"number of clients updated in master node\n");
         return ;
       }
   }else{
     fprintf(stderr,"Could not init curl\n");
   }
-  std::cout << "client update to master failed" << std::endl;
+  fprintf(stderr, "client update to master failed\n");
   return;
 }
 
@@ -572,7 +568,6 @@ int main(int argc, char **argv) {
     }
 
     if(storedResults.size()>0){
-      std::cout << "wat storedresults" << std::endl;
       std::vector<int> deletedLines;
       for (int i = storedResults.size()-1; i >= 0; i--)//TODO dit moet zolang de post maar 1 result per keer kan verwerken
       {
@@ -583,8 +578,8 @@ int main(int argc, char **argv) {
         for (int y = localData.size() - 1; y >= 0 ; y--) //TODO does not scale well
         {
           if(localData[y].second.first == deletedLines[x]){
-            localData.erase(localData.begin() + y );
             localData.erase(localData.begin() + y + 1 );
+            localData.erase(localData.begin() + y );
             deletedLines.erase(deletedLines.begin() + x);
           }
         } 
@@ -594,8 +589,6 @@ int main(int argc, char **argv) {
     if (numLocalClientsServer != numLocalClients)
     {
       updateNumClients();
-      for (auto i: storedResults)
-        std::cout << i.first << ", " << i.second << std::endl;
       
     }
     
