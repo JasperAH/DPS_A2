@@ -67,16 +67,22 @@ std::string getWorker(std::string host){
     return "failure";
 }
 
-int getProblem(std::string host){ //TODO
+int getProblem(std::string host, int clientID){ //TODO
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
 
     curl = curl_easy_init();
     if(curl) {
-        host.append("/get_problem");
+        std::string tmp = "q=get_problem&clientID=";
+        host.append("/?");
+        tmp.append(std::to_string(clientID));
+        host.append(tmp);
+        char* data = &tmp[0];
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
         curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
@@ -137,7 +143,7 @@ int computeProblem(int &lineNumber){
     return -1;
 }
 
-void sendResult(std::string host, int result, int lineNumber){
+void sendResult(std::string host, int result, int lineNumber, int clientID){
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -148,6 +154,8 @@ void sendResult(std::string host, int result, int lineNumber){
         tmp.append(std::to_string(lineNumber));
         tmp.append("&result=");
         tmp.append(std::to_string(result));
+        tmp.append("&clientID=");
+        tmp.append(std::to_string(clientID));
         host.append(tmp);
         char* data = &tmp[0];
         curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
@@ -279,14 +287,14 @@ int main(int argc, char **argv)
     
     
 
-    if(getProblem(worker) == -1){
+    if(getProblem(worker, clientID) == -1){
         checkout(worker, clientID);
         return -1;
     }
     else{
         int lineNumber;
         int result = computeProblem(lineNumber); //TODO do somethin with error (result == -1)
-        sendResult(worker, result, lineNumber);
+        sendResult(worker, result, lineNumber, clientID);
         checkout(worker, clientID);
     }
 

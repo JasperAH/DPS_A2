@@ -34,10 +34,14 @@ It seems the above instructions do not hold up on the DAS5 cluster. Might have t
 ### MILESTONES
 - [x] connection between a 1-node server and a client (curl works)
 - [x] a client asks for connection at a master node, gets a worker node assigned, gets connection
-- [ ] a workload is given to a client and result is returned
-- [ ] workload distribution at master-node
+- [x] a workload is given to a client and result is returned
+- [x] workload distribution at master-node
 - [ ] failure detection with heartbeats and or timeouts in server
-- [ ] failure detection for client failure with heartbeats and or timeouts
-- [ ] master node election system in case of failure
+- [x] failure detection for client failure with heartbeats and or timeouts
+- [x] master node election system in case of failure
 - [ ] workernode failure work recovery
 - [ ] workernode failure client redistribution
+
+
+### Extra possible features
+- [ ] Dunamic redistribution of workload at master-node

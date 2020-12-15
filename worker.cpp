@@ -29,6 +29,8 @@ static const int MAXCLIENTS = 2; //TODO find optimum
 bool clientActive[MAXCLIENTS];
 int numLocalClientsServer;
 int numLocalClients;
+//Client heartbeat:
+std::chrono::time_point<std::chrono::system_clock> clientHeartbeat[MAXCLIENTS];
 
 // MASTER stuff
 std::vector<std::vector<int>> inputData; // 2d matrix of inputdata
@@ -70,6 +72,7 @@ std::string activateClient(){
     {
       clientActive[i] = true;
       numLocalClients++;
+      clientHeartbeat[i] = std::chrono::system_clock::now();
       return std::to_string(i);
     }
   }
@@ -95,54 +98,70 @@ struct HelloHandler : public Pistache::Http::Handler {
     else if(request.resource().compare("/get_worker") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, assignWorker()); // return hostname of assigned worker
     }
-    else if(request.resource().compare("/get_problem") == 0 && request.method() == Pistache::Http::Method::Get){
-      Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok);
-      std::string data;
-      std::string lineNumber;
-      int found = -1;
-      for (int i = 0; i < localData.size(); i++)
-      {
-        if (localData[i].first == -1)
-        {
-          data = localData[i].second.second;
-          lineNumber = std::to_string (localData[i].second.first);
-          found = i;
-          break;
-        }
-      }
-      if (found == -1)
-      {
-        std::string tmp("X");
-        rStream << tmp.c_str() << "\n";
-        //rStream << std::to_string(Pistache::Http::Code::Service_Unavailable).c_str();
-        rStream << Pistache::Http::ends;
-        /* TODO send error that data was not available ofzo, mss meer data ophalen?, mss niet ivm blocking */
-      }
-      else
-      {
-        rStream << lineNumber.c_str() << "\n";
-        rStream << Pistache::Http::flush;
-        rStream << localData[found].second.second.c_str() << "\n";
-        rStream << Pistache::Http::flush;
-        rStream << localData[found+1].second.second.c_str() << "\n";
-        rStream << Pistache::Http::flush;
-        localData[found].first = 1;
-        localData[found+1].first = 1;
-        rStream << Pistache::Http::ends; // also flushes and ends the stream
-        writer.send(Pistache::Http::Code::Ok);
-      }
-    }
     else if(request.resource().compare("/stop") == 0 && request.method() == Pistache::Http::Method::Get){
       stop_server = true;
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     else {
-      // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>
+      //if(request.resource().compare("/get_problem") == 0 && request.method() == Pistache::Http::Method::Get){
+      // usage: <host>:<port>/?q=get_problem\&clientID=<clientID>
+      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
+        if (request.query().get("q").get() == "get_problem"){
+          int client = atoi(request.query().get("clientID").get().c_str());
+          clientHeartbeat[client] = std::chrono::system_clock::now();
+          Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok);
+          std::string data;
+          std::string lineNumber;
+          int found = -1;
+          for (int i = 0; i < localData.size(); i++)
+          {
+            if (localData[i].first == -1)
+            {
+              data = localData[i].second.second;
+              lineNumber = std::to_string (localData[i].second.first);
+              found = i;
+              break;
+            }
+          }
+          if (found == -1)
+          {
+            std::string tmp("X");
+            rStream << tmp.c_str() << "\n";
+            //rStream << std::to_string(Pistache::Http::Code::Service_Unavailable).c_str();
+            rStream << Pistache::Http::ends;
+            /* TODO send error that data was not available ofzo, mss meer data ophalen?, mss niet ivm blocking */
+          }
+          else
+          {
+            rStream << lineNumber.c_str() << "\n";
+            rStream << Pistache::Http::flush;
+            rStream << localData[found].second.second.c_str() << "\n";
+            rStream << Pistache::Http::flush;
+            rStream << localData[found+1].second.second.c_str() << "\n";
+            rStream << Pistache::Http::flush;
+            localData[found].first = client;
+            localData[found+1].first = client;
+            rStream << Pistache::Http::ends; // also flushes and ends the stream
+            writer.send(Pistache::Http::Code::Ok);
+          }
+        }
+      }
+      // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>\&clientID=<clientID>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){ //TODO deassign worker in master so more clients can be assigned
         if (request.query().get("q").get() == "uploadFromClient"){
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
+          int client = atoi(request.query().get("clientID").get().c_str());
+          clientHeartbeat[client] = std::chrono::system_clock::now();
           storedResults.push_back({ind, res});
+          writer.send(Pistache::Http::Code::Ok); // return OK
+        }
+      }
+      // usage: <host>:<port>/?q=clientHeartbeat\&clientID=<clientID>
+      if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){ //TODO deassign worker in master so more clients can be assigned
+        if (request.query().get("q").get() == "clientHeartbeat"){
+          int client = atoi(request.query().get("clientID").get().c_str());
+          clientHeartbeat[client] = std::chrono::system_clock::now();
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -178,6 +197,14 @@ struct HelloHandler : public Pistache::Http::Handler {
           numLocalClients--;
           int cID = atoi(request.query().get("clientID").get().c_str());
           clientActive[cID] = false;
+          for (int x = localData.size()-1; x >= 0 ; x--)
+          {
+            if (localData[x].first == cID)
+            {
+              localData[x].first == -1;
+            }
+            
+          }
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -543,6 +570,7 @@ int main(int argc, char **argv) {
   double heartbeat_interval = 5.0; // heartbeat once every 5 sec
   double snapshot_interval = 300.0; // snapshot every 5 min
   int master_down_counter = 0;
+  double clientTimeout = 60.0;
 
   while(!stop_server){
     // HEARTBEAT
@@ -589,9 +617,34 @@ int main(int argc, char **argv) {
     if (numLocalClientsServer != numLocalClients)
     {
       updateNumClients();
-      
     }
     
+
+    //Client heartbeat, only when number of clients gets to high
+    if(numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
+      for (int i = 0; i < numLocalClients; i++)
+      {
+        if (clientActive[i])
+        {
+          diff = std::chrono::system_clock::now() - clientHeartbeat[i];
+          if (diff.count() > clientTimeout)
+          {
+            numLocalClients--;
+            clientActive[i] = false;
+            for (int x = localData.size()-1; x >= 0 ; x--)
+            {
+              if (localData[x].first == i)
+              {
+                localData[x].first == -1;
+              }
+              
+            }
+            
+          }
+        }
+      }
+    }
+
 
 
     // SNAPSHOT periodically
