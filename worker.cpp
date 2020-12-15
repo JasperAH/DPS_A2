@@ -215,15 +215,16 @@ void checkpoint_data(){
     csv_file << "\n";
   }
   csv_file.close();
-
-  csv_file.open(dataPath+"snapshot_distributed.csv");
-  for(int i = 0; i < distributedData.size(); ++i){
-    csv_file << std::to_string(distributedData.at(i).first.first) << ",";
-    csv_file << std::to_string(distributedData.at(i).first.second) << ",";
-    csv_file << std::to_string(distributedData.at(i).second.first) << ",";
-    csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+  if(distributedData.size()>0){
+    csv_file.open(dataPath+"snapshot_distributed.csv");
+    for(int i = 0; i < distributedData.size(); ++i){
+      csv_file << std::to_string(distributedData.at(i).first.first) << ",";
+      csv_file << std::to_string(distributedData.at(i).first.second) << ",";
+      csv_file << std::to_string(distributedData.at(i).second.first) << ",";
+      csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+    }
+    csv_file.close();
   }
-  csv_file.close();
 }
 
 void read_input_data(){
@@ -288,8 +289,8 @@ void read_input_data(){
         curIndex = 0;
       }
     }
+    csv_file.close();
   }
-  csv_file.close();
 }
 
 void elect_master(){
