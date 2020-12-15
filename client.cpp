@@ -254,52 +254,49 @@ int main(int argc, char **argv)
     
     std::string host = argv[1];
     std::string ID = argv[2];
+
+    int numProblems = 10;
+    int numCheckins = 10;
+
+    for(int i = 0; i < numCheckins; i++){
     std::string master = getMaster(host);
-    if (master == "failure")
-    {
-        std::cout << "tsja TODO" << std::endl;
-    }
-    
-    std::cout << master << std::endl;
-
-    std::string worker = getWorker(master);
-
-    if (worker == "")
-    {
-        std::cout << "empty worker assignment" << std::endl;
-    }
-    else
-    {
-        std::cout << worker << std::endl;
-    }
-
-    int clientID = signup(worker);
-    int x = 0;
-    while (clientID < 0 && x < 5) // signup failed
-    {
-        clientID = signup(worker);
-        x++;
-    }
-    if (x == 5)
-    {
-        std::cout << "No viable connection was made, exit program" << std::endl;
-        return -1;
-    }
-    
-    
-
-    if(getProblem(worker, clientID, ID) == -1){
-        checkout(worker, clientID);
-        return -1;
-    }
-    else{
-        int lineNumber;
-        int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
-        sendResult(worker, result, lineNumber, clientID);
+        if (master == "failure")
+        {
+            std::cout << "No master assigned" << std::endl;
+            continue;
+        }
+        std::string worker = getWorker(master);
+        if (worker == "")
+        {
+            std::cout << "empty worker assignment" << std::endl;
+            continue;
+        }
+        int clientID = signup(worker);
+        int x = 0;
+        while (clientID < 0 && x < 5) // signup failed
+        {
+            clientID = signup(worker);
+            x++;
+        }
+        if (x == 5)
+        {
+            std::cout << "No viable connection was made, exit program" << std::endl;
+            continue;
+        }
+        for (int j = 0; j < numProblems; j++){
+            if(getProblem(worker, clientID, ID) == -1){
+                checkout(worker, clientID);
+                continue;
+            }
+            else{
+                int lineNumber;
+                int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
+                sendResult(worker, result, lineNumber, clientID);
+            }
+        }
         checkout(worker, clientID);
     }
-
-    
+    std::cout << "Client " << ID << " has finished all checkins and problems." << std::endl;
 
     return 0;
 }
