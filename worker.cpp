@@ -639,7 +639,8 @@ int main(int argc, char **argv) {
     {
       for (int i = 0; i < n_workers; i++)
       {
-        if (i != master_id && (std::chrono::system_clock::now() - worker_heartbeats[i]).count() > master_interval)
+        std::chrono::duration<double> timediff = std::chrono::system_clock::now() - worker_heartbeats[i];
+        if (i != master_id && timediff.count() > master_interval)
         {
           fprintf(stderr,"worker node %s appears to be down \n", std::to_string(i).c_str());
           //TODO workernode is down
