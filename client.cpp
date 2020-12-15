@@ -67,7 +67,7 @@ std::string getWorker(std::string host){
     return "failure";
 }
 
-int getProblem(std::string host, int clientID){ //TODO
+int getProblem(std::string host, int clientID, std::string ID){ //TODO
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -88,7 +88,7 @@ int getProblem(std::string host, int clientID){ //TODO
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
-            std::ofstream out("tmp_data.csv"); //TODO magic name
+            std::ofstream out("tmp_data.csv" + ID); //TODO magic name
             out << readBuffer;
             out.close();
             return 1;
@@ -111,8 +111,8 @@ void heartbeat(){ //TODO
     return;
 }
 
-int computeProblem(int &lineNumber){
-    std::ifstream file("tmp_data.csv");
+int computeProblem(int &lineNumber, std::string ID){
+    std::ifstream file("tmp_data.csv" + ID);
     std::string line;
     if (file.is_open()) {
         std::getline(file, line);
@@ -246,13 +246,14 @@ int signup(std::string host){
 
 int main(int argc, char **argv)
 {
-    if (argc < 2)
+    if (argc < 3)
     {
-        std::cout << "should be called as ./client [connectionpoint]" << std::endl;
+        std::cout << "should be called as ./client [connectionpoint] [unique id]" << std::endl;
         return -1;
     }
     
     std::string host = argv[1];
+    std::string ID = argv[2];
     std::string master = getMaster(host);
     if (master == "failure")
     {
@@ -287,13 +288,13 @@ int main(int argc, char **argv)
     
     
 
-    if(getProblem(worker, clientID) == -1){
+    if(getProblem(worker, clientID, ID) == -1){
         checkout(worker, clientID);
         return -1;
     }
     else{
         int lineNumber;
-        int result = computeProblem(lineNumber); //TODO do somethin with error (result == -1)
+        int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
         sendResult(worker, result, lineNumber, clientID);
         checkout(worker, clientID);
     }
