@@ -19,6 +19,7 @@ int n_workers;
 char** hostnames;
 
 int * workload;
+std::chrono::time_point<std::chrono::system_clock> * worker_heartbeats;
 
 bool dataAvailableInServer = true;
 std::vector<std::pair<int, std::pair<int, std::string>>> localData; //clientID, line, data
@@ -89,9 +90,6 @@ struct HelloHandler : public Pistache::Http::Handler {
     else if(request.resource().compare("/signup") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, activateClient()); // return OK
     }
-    else if(request.resource().compare("/heartbeat") == 0 && request.method() == Pistache::Http::Method::Get){
-      writer.send(Pistache::Http::Code::Ok); // return OK
-    }
     else if(request.resource().compare("/get_master") == 0 && request.method() == Pistache::Http::Method::Get){
       writer.send(Pistache::Http::Code::Ok, hostnames[master_id]); // return hostname of master
     }
@@ -103,7 +101,17 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok); // return OK
     }
     else {
-      //if(request.resource().compare("/get_problem") == 0 && request.method() == Pistache::Http::Method::Get){
+
+      //if(request.resource().compare("/heartbeat") == 0 && request.method() == Pistache::Http::Method::Get){
+      // usage: <host>:<port>/?q=heartbeat\&workerID=<workerID>
+      if(master_id == worker_id && request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
+        if (request.query().get("q").get() == "heartbeat"){
+          int worker = atoi(request.query().get("workerID").get().c_str());
+          worker_heartbeats[worker] = std::chrono::system_clock::now();
+          writer.send(Pistache::Http::Code::Ok); // return OK
+        }
+      }
+
       // usage: <host>:<port>/?q=get_problem\&clientID=<clientID>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "get_problem"){
@@ -182,7 +190,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       }
 
       // call using <host>:<port>/?q=numClientsChange\&workerID=<worker_id>\&numLocalClients=<numLocalClients>
-      if(master_id == worker_id &&request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
+      if(master_id == worker_id && request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "numClientsChange"){
           int wID = atoi(request.query().get("workerID").get().c_str());
           int numLocal = atoi(request.query().get("numLocalClients").get().c_str());
@@ -262,9 +270,14 @@ bool sendHeartBeat(){
   curl = curl_easy_init();
   if(curl) {
       std::string host(hostnames[master_id]);
-      host.append("/heartbeat");
+      std::string tmp = "q=heartbeat&workerID=";
+      host.append("/?");
+      tmp.append(std::to_string(worker_id));
+      host.append(tmp);
+      char* data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
       curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
       curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
       curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
       res = curl_easy_perform(curl);
@@ -536,9 +549,11 @@ int main(int argc, char **argv) {
   n_workers = argc - 2;
   hostnames = (char**) malloc(sizeof(char*)*(argc-2));
   workload = (int*) malloc(sizeof(int)*(argc-2));
+  worker_heartbeats = (std::chrono::time_point<std::chrono::system_clock>*) malloc(sizeof(std::chrono::time_point<std::chrono::system_clock>)*(argc-2));
   for(int i = 0; i < n_workers; ++i){
     hostnames[i] = argv[i+2];
     workload[i] = 0;
+    worker_heartbeats[i] = std::chrono::system_clock::now();
   }
   for (int i = 0; i < MAXCLIENTS; i++)
   {
@@ -568,6 +583,7 @@ int main(int argc, char **argv) {
   std::chrono::time_point<std::chrono::system_clock> snapshot_time = std::chrono::system_clock::now();
   std::chrono::duration<double> diff;
   double heartbeat_interval = 5.0; // heartbeat once every 5 sec
+  double master_interval = 10.0; // check every 10 sec if every worker did heartbeat
   double snapshot_interval = 300.0; // snapshot every 5 min
   int master_down_counter = 0;
   double clientTimeout = 60.0;
@@ -590,6 +606,26 @@ int main(int argc, char **argv) {
       }
       heartbeat_time = std::chrono::system_clock::now();
     }
+    if ((master_id == worker_id) && n_workers > 1 && (diff.count() > master_interval))
+    {
+      for (int i = 0; i < n_workers; i++)
+      {
+        if (i != master_id && (std::chrono::system_clock::now() - worker_heartbeats[i]).count() > master_interval)
+        {
+          fprintf(stderr,"worker node %s appears to be down \n", std::to_string(i).c_str());
+          //TODO workernode is down
+          /*
+          {
+            contact node and check if alive?
+            what if node restarts before this check is done, some data is never delivered as
+          }
+          */
+        }
+      }
+      heartbeat_time = std::chrono::system_clock::now();
+    }
+    
+
 
     if (localData.size() < MINIMUM_STORE && dataAvailableInServer){
       ask_data();
@@ -597,7 +633,7 @@ int main(int argc, char **argv) {
 
     if(storedResults.size()>0){
       std::vector<int> deletedLines;
-      for (int i = storedResults.size()-1; i >= 0; i--)//TODO dit moet zolang de post maar 1 result per keer kan verwerken
+      for (int i = storedResults.size()-1; i >= 0; i--)//TODO This is needed as long as the POST result only takes one result at a time
       {
         deletedLines.push_back(send_result(i));
       }
