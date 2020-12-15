@@ -9,7 +9,7 @@
 #include <fstream>
 
 //edit this depending on device
-const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
+const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
 bool stop_server = false;
 
