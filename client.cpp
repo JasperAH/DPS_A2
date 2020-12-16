@@ -9,6 +9,8 @@
 std::string line1;
 std::string line2;
 
+std::string dataPath = "/local/ddps2008/";
+
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     ((std::string*)userp)->append((char*)contents, size * nmemb);
@@ -88,7 +90,7 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
-            std::ofstream out("tmp_data.csv" + ID); //TODO magic name
+            std::ofstream out(dataPath+"tmp_data.csv" + ID); //TODO magic name
             out << readBuffer;
             out.close();
             return 1;
@@ -112,7 +114,7 @@ void heartbeat(){ //TODO
 }
 
 int computeProblem(int &lineNumber, std::string ID){
-    std::ifstream file("tmp_data.csv" + ID);
+    std::ifstream file(dataPath+"tmp_data.csv" + ID);
     std::string line;
     if (file.is_open()) {
         std::getline(file, line);
