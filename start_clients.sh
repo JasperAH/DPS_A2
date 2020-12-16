@@ -9,8 +9,9 @@ n_clients=$1
 m_hostname=$2
 for srv in "${@:2}"
 do
-	for i in {0..$n_clients}
+	for i in $(eval echo "{0..${n_clients}}")
 	do
+		echo "$srv $i"
 		ssh $USER@$srv "sh -c 'nohup /home/ddps2008/DPS_A2/client $i $m_hostname > /dev/null 2>&1 &'"
 	done
 done
