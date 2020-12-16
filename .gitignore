@@ -45,4 +45,4 @@ pistache/*
 
 
 # Data Files
-*.csv
+*.csv*

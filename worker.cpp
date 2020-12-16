@@ -7,11 +7,11 @@
 #include <sstream>
 #include <vector>
 #include <fstream>
-
+#include <mutex>
 //edit this depending on device
-const std::string dataPath = "/var/scratch/ddps2008/";
+//const std::string dataPath = "/var/scratch/ddps2008/";
 //const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
-//const std::string dataPath = "/home/user/Documents/DPS/A2/";
+const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
 bool stop_server = false;
 
@@ -38,11 +38,14 @@ std::chrono::time_point<std::chrono::system_clock> clientHeartbeat[MAXCLIENTS];
 // MASTER stuff
 std::vector<std::vector<int>> inputData; // 2d matrix of inputdata
 std::vector<std::pair<std::pair<int,bool>,std::pair<int,int>>> distributedData; // list of worker_id, has_returned_result, start_index, end_index (excl)
-int output = 0;
+long long output = 0;
 int curIndex = 0;
 int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
 bool rollback = false;
-
+std::mutex output_lock;
+std::chrono::time_point<std::chrono::system_clock> start_time;
+std::chrono::time_point<std::chrono::system_clock> end_time;
+bool started = false;
 
 // WORKER stuff
 
@@ -93,14 +96,22 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok, activateClient()); // return OK
     }
     else if(request.resource().compare("/get_master") == 0 && request.method() == Pistache::Http::Method::Get){
+      if(!started){
+        start_time = std::chrono::system_clock::now();
+        started = true;
+      } 
       writer.send(Pistache::Http::Code::Ok, hostnames[master_id]); // return hostname of master
     }
     else if(request.resource().compare("/get_worker") == 0 && request.method() == Pistache::Http::Method::Get){
+      if(!started){
+        start_time = std::chrono::system_clock::now();
+        started = true;
+      } 
       writer.send(Pistache::Http::Code::Ok, assignWorker()); // return hostname of assigned worker
     }
     else if(request.resource().compare("/stop") == 0 && request.method() == Pistache::Http::Method::Get){
       stop_server = true;
-      writer.send(Pistache::Http::Code::Ok); // return OK
+      writer.send(Pistache::Http::Code::Ok,"stop"); // return OK
     }
     else {
 
@@ -132,6 +143,11 @@ struct HelloHandler : public Pistache::Http::Handler {
               found = i;
               break;
             }
+          }
+          if(found == -1 && localData.size()>0){ // resend data from potential stragglers
+            data = localData[0].second.second;
+            lineNumber = std::to_string(localData[0].second.first);
+            found = 0;
           }
           if (found == -1)
           {
@@ -183,7 +199,9 @@ struct HelloHandler : public Pistache::Http::Handler {
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           if(distributedData.at(ind).first.second == false){
+            output_lock.lock();
             output += res;
+            output_lock.unlock();
             distributedData.at(ind).first.second = true;
             distributedData.at(ind+1).first.second = true;
           }
@@ -231,10 +249,71 @@ struct HelloHandler : public Pistache::Http::Handler {
           int maxIndex = ((curIndex + datasize) > inputData.at(0).size()) ? inputData.at(0).size() : (curIndex + datasize);
           if (maxIndex == curIndex)
           {
-            rStream << std::to_string(-10).c_str() << "\n"; //Means no more data available in server to distribute
-            rStream << Pistache::Http::flush;
-            rStream << Pistache::Http::ends;
-            writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
+            bool foundData = false;
+            int foundIndex = -1;
+            for(int i = 0; i < distributedData.size(); ++i){
+              if(distributedData.at(i).first.first == -1){ //worker died
+                foundData = true;
+                foundIndex = i;
+                break;
+              }
+            }
+            if(foundData){
+              distributedData.at(foundIndex).first.first = wID;
+
+              rStream << std::to_string(foundIndex).c_str() << "\n";
+              rStream << Pistache::Http::flush;
+
+              for(int i = distributedData.at(foundIndex).second.first; i < distributedData.at(foundIndex).second.second; ++i){
+                std::string line = "";
+                for(int j = 0; j < inputData.size(); ++j){
+                  line += std::to_string(inputData.at(j).at(i));
+                  if(j < (inputData.size()-1)) line += ",";
+                }
+                rStream << line.c_str() << "\n";
+                rStream << Pistache::Http::flush; //optional? should ensure sending data more often
+                writer.send(Pistache::Http::Code::Ok);      
+              }   
+              rStream << Pistache::Http::ends;
+            }else{
+              /*
+              rStream << std::to_string(-10).c_str() << "\n"; //Means no more data available in server to distribute
+              rStream << Pistache::Http::flush;
+              rStream << Pistache::Http::ends;
+              writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
+              */
+              //find data with not-yet returned results:
+              bool findOldData=false;
+              int dataIndex = -1;
+              for(int i = 0; i < distributedData.size(); ++i){
+                if(distributedData.at(i).first.second == false){
+                  findOldData = true;
+                  dataIndex = i;
+                }
+              }
+              if(findOldData){
+                rStream << std::to_string(dataIndex).c_str() << "\n";
+                rStream << Pistache::Http::flush;
+
+                for(int i = distributedData.at(dataIndex).second.first; i < distributedData.at(dataIndex).second.second; ++i){
+                  std::string line = "";
+                  for(int j = 0; j < inputData.size(); ++j){
+                    line += std::to_string(inputData.at(j).at(i));
+                    if(j < (inputData.size()-1)) line += ",";
+                  }
+                  rStream << line.c_str() << "\n";
+                  rStream << Pistache::Http::flush; //optional? should ensure sending data more often
+                  writer.send(Pistache::Http::Code::Ok);      
+                }   
+
+                rStream << Pistache::Http::ends;
+              }else{ // we should be done now
+                rStream << std::to_string(-10).c_str() << "\n"; //Means no more data available in server to distribute
+                rStream << Pistache::Http::flush;
+                rStream << Pistache::Http::ends;
+                writer.send(Pistache::Http::Code::Ok); // return OK, default behaviour
+              }
+            }
           }
           else{
             rStream << std::to_string(distributedData.size()).c_str() << "\n";
@@ -336,7 +415,7 @@ void read_input_data(){
 
   if(csv_file.is_open()){
     std::getline(csv_file,line);
-    output = atoi(line.c_str()); // first line in the file is the snapshotted result
+    output = atoll(line.c_str()); // first line in the file is the snapshotted result
     while(std::getline(csv_file,line)){
         int column = 0;
         std::string value;
@@ -372,7 +451,6 @@ void read_input_data(){
           else if(column == 3) end_ind = atoi(value.c_str());
           column++;
         }
-
         distributedData.push_back({{wid,has_returned},{start_ind,end_ind}});
       }
       if(distributedData.size() > 0){
@@ -612,10 +690,14 @@ int main(int argc, char **argv) {
   // INIT clocks & heartbeat
   std::chrono::time_point<std::chrono::system_clock> heartbeat_time = std::chrono::system_clock::now();
   std::chrono::time_point<std::chrono::system_clock> snapshot_time = std::chrono::system_clock::now();
+  std::chrono::time_point<std::chrono::system_clock> numclients_time = std::chrono::system_clock::now();
+  std::chrono::time_point<std::chrono::system_clock> client_heartbeat_time = std::chrono::system_clock::now();
   std::chrono::duration<double> diff;
   double heartbeat_interval = 5.0; // heartbeat once every 5 sec
   double master_interval = 10.0; // check every 10 sec if every worker did heartbeat
   double snapshot_interval = 300.0; // snapshot every 5 min
+  double numclients_interval = 5.0;
+  double client_heartbeat_interval = 3.0;
   int master_down_counter = 0;
   double clientTimeout = 60.0;
 
@@ -644,7 +726,12 @@ int main(int argc, char **argv) {
         std::chrono::duration<double> timediff = std::chrono::system_clock::now() - worker_heartbeats[i];
         if (i != master_id && timediff.count() > master_interval)
         {
-          fprintf(stderr,"worker node %s appears to be down \n", std::to_string(i).c_str());
+          fprintf(stderr,"worker node %s appears to be down, making data available for redistribution: \n", std::to_string(i).c_str());
+          for(int j = 0; j < distributedData.size(); ++j){
+            if(distributedData.at(j).first.first == i && distributedData.at(j).first.second == false){
+              distributedData.at(j).first.first = -1;
+            }
+          }
           //TODO workernode is down
           /*
           {
@@ -659,7 +746,7 @@ int main(int argc, char **argv) {
     
 
 
-    if (localData.size() < MINIMUM_STORE && dataAvailableInServer){
+    if (localData.size() < MINIMUM_STORE){// && dataAvailableInServer){
       ask_data();
     }
 
@@ -682,21 +769,27 @@ int main(int argc, char **argv) {
       }
     }
     
-    if (numLocalClientsServer != numLocalClients)
+    diff = std::chrono::system_clock::now() - numclients_time;
+    if (numLocalClientsServer != numLocalClients && diff.count() > numclients_interval)
     {
       updateNumClients();
+      numclients_time = std::chrono::system_clock::now();
     }
     
 
     //Client heartbeat, only when number of clients gets to high
-    if(numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
+    diff = std::chrono::system_clock::now() - client_heartbeat_time;
+    if(diff.count() > client_heartbeat_interval){ // numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
       for (int i = 0; i < numLocalClients; i++)
       {
+        fprintf(stderr,"checking heartbeat of client %d, active: %d\n",i,clientActive[i]);
         if (clientActive[i])
         {
           diff = std::chrono::system_clock::now() - clientHeartbeat[i];
+          fprintf(stderr,"time since last heartbeat of client %d: %f\n",i,diff.count());
           if (diff.count() > clientTimeout)
           {
+            fprintf(stderr,"deactivating client %d\n",i);
             numLocalClients--;
             clientActive[i] = false;
             for (int x = localData.size()-1; x >= 0 ; x--)
@@ -707,10 +800,11 @@ int main(int argc, char **argv) {
               }
               
             }
-            
+            fprintf(stderr,"client %d deactivated\n",i);
           }
         }
       }
+      client_heartbeat_time = std::chrono::system_clock::now();
     }
 
 
@@ -732,11 +826,15 @@ int main(int argc, char **argv) {
 
       stop_server = done;
     }
+    //fprintf(stderr,"%d",stop_server);
   }
   fprintf(stderr,"stopping server\n");
   if(master_id == worker_id){
+    end_time = std::chrono::system_clock::now();
+    diff = end_time - start_time;
     checkpoint_data();
-    fprintf(stdout, "result: %d\n",output);
+    fprintf(stdout, "result: %lld\n",output);
+    fprintf(stdout,"time: %f\n",diff.count());
     stop_servers();
   }
   free(hostnames);
