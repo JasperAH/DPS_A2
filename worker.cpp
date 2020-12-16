@@ -9,7 +9,9 @@
 #include <fstream>
 
 //edit this depending on device
-const std::string dataPath = "/home/user/Documents/DPS/A2/";
+const std::string dataPath = "/var/scratch/ddps2008/";
+//const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
+//const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
 bool stop_server = false;
 
@@ -24,9 +26,9 @@ std::chrono::time_point<std::chrono::system_clock> * worker_heartbeats;
 bool dataAvailableInServer = true;
 std::vector<std::pair<int, std::pair<int, std::string>>> localData; //clientID, line, data
 std::vector<std::pair<int,int>> storedResults; //lineIndex, Result
-static int MINIMUM_STORE = 10; //TODO find optimum
+static int MINIMUM_STORE = 100; //TODO find optimum
 
-static const int MAXCLIENTS = 2; //TODO find optimum
+static const int MAXCLIENTS = 50; //TODO find optimum
 bool clientActive[MAXCLIENTS];
 int numLocalClientsServer;
 int numLocalClients;
