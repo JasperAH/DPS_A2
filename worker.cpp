@@ -9,9 +9,9 @@
 #include <fstream>
 #include <mutex>
 //edit this depending on device
-//const std::string dataPath = "/var/scratch/ddps2008/";
+const std::string dataPath = "/var/scratch/ddps2008/";
 //const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
-const std::string dataPath = "/home/user/Documents/DPS/A2/";
+//const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
 bool stop_server = false;
 
