@@ -37,6 +37,7 @@
 dummyClient*
 client
 worker
+data_gen
 
 # Libraries
 pistache
