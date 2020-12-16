@@ -259,7 +259,7 @@ int main(int argc, char **argv)
     int numCheckins = 10;
 
     for(int i = 0; i < numCheckins; i++){
-    std::string master = getMaster(host);
+        std::string master = getMaster(host);
         if (master == "failure")
         {
             std::cout << "No master assigned" << std::endl;
@@ -292,6 +292,7 @@ int main(int argc, char **argv)
                 int lineNumber;
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
                 sendResult(worker, result, lineNumber, clientID);
+                numCheckins++; // keep going as long as there are problems to solve
             }
         }
         checkout(worker, clientID);
