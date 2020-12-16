@@ -34,8 +34,15 @@
 .vscode
 .vscode/*
 
+dummyClient*
 client
 worker
+data_gen
 
+# Libraries
 pistache
 pistache/*
+
+
+# Data Files
+*.csv
