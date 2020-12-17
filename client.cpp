@@ -165,6 +165,8 @@ int computeProblem(int &lineNumber, std::string ID){
         }
         return result;
         
+    }else{
+        fprintf(stderr,"couldn't open tmp_data.csv\n");
     }
     
     return -1;
@@ -229,7 +231,7 @@ void checkout(std::string host, int localID){
         }
         else
         {
-            std::cout << "checkout failure";
+            std::cout << "checkout failure" <<std::endl;
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
@@ -257,8 +259,16 @@ int signup(std::string host){
                 return -1;
             }
             else{
-                std::cout << "Succesfull signup" << std::endl;
-                return stoi(readBuffer);
+                try{
+                    std::cout << "Succesfull signup " << readBuffer.c_str() << std::endl;
+                    if(readBuffer == "")
+                        return -1;
+                    else
+                        return stoi(readBuffer);
+                } catch(int e){
+                    fprintf(stderr,"error: %d\n",e);
+                    return -1;
+                }
             }
         }
         else
@@ -319,7 +329,7 @@ int main(int argc, char **argv)
                 int lineNumber;
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
                 sendResult(worker, result, lineNumber, clientID);
-                numCheckins++; // keep going as long as there are problems to solve
+                numProblems++; // keep going as long as there are problems to solve
             }
         }
         checkout(worker, clientID);

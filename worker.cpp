@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <mutex>
+#include <signal.h>
 //edit this depending on device
 const std::string dataPath = "/var/scratch/ddps2008/";
 //const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
@@ -93,7 +94,16 @@ struct HelloHandler : public Pistache::Http::Handler {
       writer.send(Pistache::Http::Code::Ok, std::to_string(worker_id)); // return own ID for master election
     }
     else if(request.resource().compare("/signup") == 0 && request.method() == Pistache::Http::Method::Get){
-      writer.send(Pistache::Http::Code::Ok, activateClient()); // return OK
+      std::string msg;
+      try{
+        msg = activateClient();
+      }catch (int e){
+        fprintf(stderr,"error in /signup: %d\n",e);
+        msg = "error - No available client spot";
+      }
+      
+      //fprintf(stderr,"added client %s\n",msg.c_str());
+      writer.send(Pistache::Http::Code::Ok, msg); // return OK
     }
     else if(request.resource().compare("/get_master") == 0 && request.method() == Pistache::Http::Method::Get){
       if(!started){
@@ -199,11 +209,12 @@ struct HelloHandler : public Pistache::Http::Handler {
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           if(distributedData.at(ind).first.second == false){
-            output_lock.lock();
+            std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
+            oLock.lock();
             output += res;
-            output_lock.unlock();
             distributedData.at(ind).first.second = true;
             distributedData.at(ind+1).first.second = true;
+            oLock.unlock();
           }
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
@@ -372,7 +383,7 @@ bool sendHeartBeat(){
 }
 
 void checkpoint_data(){
-  fprintf(stderr,"snapshotting current progress\n");
+  fprintf(stderr,"snapshotting current progress.... ");
   std::ofstream csv_file(dataPath+"snapshot.csv");
   csv_file << output << "\n"; // snapshot partial result
 
@@ -396,6 +407,7 @@ void checkpoint_data(){
     }
     csv_file.close();
   }
+  fprintf(stderr,"Done.\n");
 }
 
 void read_input_data(){
@@ -653,7 +665,7 @@ int main(int argc, char **argv) {
       "The worker's own hostname is at index worker_id in worker_hostnames.\n", argv[0]);
       return -1;
   }
-
+  signal(SIGPIPE, SIG_IGN);
   worker_id = atoi(argv[1]);
   n_workers = argc - 2;
   hostnames = (char**) malloc(sizeof(char*)*(argc-2));
@@ -674,7 +686,7 @@ int main(int argc, char **argv) {
   // INIT pistache
   Pistache::Address addr(Pistache::Ipv4::any(), Pistache::Port(9080));
 
-  auto opts = Pistache::Http::Endpoint::options().threads(8);
+  auto opts = Pistache::Http::Endpoint::options().threads(2);
   Pistache::Http::Endpoint server(addr);
   server.init(opts);
   server.setHandler(std::make_shared<HelloHandler>());
@@ -701,6 +713,7 @@ int main(int argc, char **argv) {
   int master_down_counter = 0;
   double clientTimeout = 60.0;
 
+  fprintf(stderr,"starting main loop\n");
   while(!stop_server){
     // HEARTBEAT
     diff = std::chrono::system_clock::now() - heartbeat_time;
@@ -751,10 +764,15 @@ int main(int argc, char **argv) {
     }
 
     if(storedResults.size()>0){
-      std::vector<int> deletedLines;
+      std::vector<int> deletedLines;/*
       for (int i = storedResults.size()-1; i >= 0; i--)//TODO This is needed as long as the POST result only takes one result at a time
       {
+        fprintf(stderr,"sending result... ");
         deletedLines.push_back(send_result(i));
+        fprintf(stderr,"Done.\n");
+      }*/
+      while(storedResults.size()>0){
+        deletedLines.push_back(send_result(storedResults.size()-1));
       }
       for (int x = deletedLines.size() - 1; x >= 0 ; x--)
       {
@@ -838,4 +856,6 @@ int main(int argc, char **argv) {
     stop_servers();
   }
   free(hostnames);
+  free(workload);
+  free(worker_heartbeats);
 }

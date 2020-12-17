@@ -20,7 +20,7 @@ int main(){
         outfile << rand() % 101;
         for (int j = 1; j < arraylength; j++)
         {
-            outfile << ", " << rand() % 101;
+            outfile << "," << rand() % 101;
         }
         outfile << std::endl;
         if (i%2 == 0)
