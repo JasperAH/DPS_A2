@@ -108,8 +108,33 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
     return -1;
 }
 
-void heartbeat(){ //TODO
-    throw "heartbeat is not implemented yet.";
+void heartbeat(std::string host, int clientID){ //TODO
+    CURL *curl;
+    CURLcode res;
+    std::string readBuffer;
+
+    curl = curl_easy_init();
+    if(curl) {
+        std::string tmp = "q=clientHeartbeat&clientID=";
+        host.append("/?");
+        tmp.append(std::to_string(clientID));
+        host.append(tmp);
+        char* data = &tmp[0];
+        curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
+        curl_easy_setopt(curl, CURLOPT_PORT, 9080);
+        curl_easy_setopt(curl, CURLOPT_POST, 1);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+        if(res == 0 ){
+            return; //TODO more implementation?? Don't think it is necessary
+        }        
+    }else{
+        fprintf(stderr,"Could not init curl\n");
+        return;
+    }
     return;
 }
 
