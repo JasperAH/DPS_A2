@@ -44,6 +44,7 @@ int curIndex = 0;
 int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
 bool rollback = false;
 std::mutex output_lock;
+std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
 std::chrono::time_point<std::chrono::system_clock> start_time;
 std::chrono::time_point<std::chrono::system_clock> end_time;
 bool started = false;
@@ -209,7 +210,6 @@ struct HelloHandler : public Pistache::Http::Handler {
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           if(distributedData.at(ind).first.second == false){
-            std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
             oLock.lock();
             output += res;
             distributedData.at(ind).first.second = true;
@@ -384,8 +384,8 @@ bool sendHeartBeat(){
 
 void checkpoint_data(){
   fprintf(stderr,"snapshotting current progress.... ");
-  std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
   std::ofstream csv_file(dataPath+"snapshot.csv");
+
   oLock.lock();
   csv_file << output << "\n"; // snapshot partial result
   oLock.unlock();
@@ -408,7 +408,7 @@ void checkpoint_data(){
       csv_file << std::to_string(distributedData.at(i).first.second) << ",";
       csv_file << std::to_string(distributedData.at(i).second.first) << ",";
       csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
-      oLock.lock();
+      oLock.unlock();
     }
     csv_file.close();
   }
@@ -432,7 +432,9 @@ void read_input_data(){
 
   if(csv_file.is_open()){
     std::getline(csv_file,line);
+    oLock.lock();
     output = atoll(line.c_str()); // first line in the file is the snapshotted result
+    oLock.unlock();
     while(std::getline(csv_file,line)){
         int column = 0;
         std::string value;
@@ -856,7 +858,9 @@ int main(int argc, char **argv) {
     end_time = std::chrono::system_clock::now();
     diff = end_time - start_time;
     checkpoint_data();
+    oLock.lock();
     fprintf(stdout, "result: %lld\n",output);
+    oLock.unlock();
     fprintf(stdout,"time: %f\n",diff.count());
     stop_servers();
   }

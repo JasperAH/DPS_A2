@@ -23,7 +23,7 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
 }
 
 std::string getMaster(std::string host){
-
+    fprintf(stderr,"getting master\n");
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -94,12 +94,14 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT,5);
         std::chrono::time_point<std::chrono::system_clock> getProblemTimer = std::chrono::system_clock::now();
         res = curl_easy_perform(curl);
-        std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
-        fprintf(stdout,"getProblem in %f\n",diff.count());
+
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
+            std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
+            fprintf(stdout,"getProblem in %f\n",diff.count());
             std::ofstream out(dataPath+"tmp_data.csv" + ID); //TODO magic name
             out << readBuffer;
             out.close();
@@ -186,12 +188,16 @@ int computeProblem(int &lineNumber, std::string ID){
         file.close();
 
         int result = 0;
-        for (int i = 0; i < data[0].size(); i++)
-        {
-            result += data[0][i] * data[1][i];
+        if(data.size() > 0){
+            for (int i = 0; i < data[0].size(); i++)
+            {
+                result += data[0][i] * data[1][i];
+            }
+            return result;
+        }else{
+            fprintf(stderr,"tmp_data.csv is malformed\n");
+            return -1;
         }
-        return result;
-        
     }else{
         fprintf(stderr,"couldn't open tmp_data.csv\n");
     }
@@ -220,6 +226,7 @@ void sendResult(std::string host, int result, int lineNumber, int clientID){
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        curl_easy_setopt(curl,CURLOPT_TIMEOUT,5);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
         
@@ -328,9 +335,9 @@ int main(int argc, char **argv)
     int numCheckins = 10;
     while(!stop_client){
     //for(int i = 0; i < numCheckins; i++){
-       /*if(numCheckins <= 0){
+        if(numCheckins <= 0){
             stop_client = true;
-        }*/
+        }
         std::string master = getMaster(host);
         if (master == "failure")
         {
@@ -365,7 +372,6 @@ int main(int argc, char **argv)
             if(getProblem(worker, clientID, ID) == -1){
                 checkout(worker, clientID);
                 numCheckins--;
-                continue;
             }
             else{
                 int lineNumber;
