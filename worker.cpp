@@ -851,9 +851,10 @@ int main(int argc, char **argv) {
     if(!stop_server && master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
       bool done = true;
       for(int i = 0; i < distributedData.size(); i = i+2){
-        if(distributedData.at(i).first.second == false)
+        if(distributedData.at(i).first.second == false){
           done = false;
           break;
+        }
       }
 
       stop_server = done;
