@@ -67,14 +67,20 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
 /******************************************Master functions*******************************/
 
 std::string assignWorker(){
-  for (int i = 0; i < n_workers; i++)
-  {
-    if (workload[i] < MAXCLIENTS)
-    {
-      return hostnames[i];
+  //first get worker with lowest workload
+  int wload = MAXCLIENTS +1;
+  int wload_i = -1;
+  for (int i = 0; i < n_workers; ++i){
+    if(workload[i] < wload){
+      wload = workload[i];      
+      wload_i = i;
     }
   }
-  return "";
+  if(wload < MAXCLIENTS && wload_i > -1){
+    return hostnames[wload_i];
+  }else{
+    return "";
+  }
 }
 
 /******************************************Worker functions*******************************/
