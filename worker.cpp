@@ -809,7 +809,7 @@ int main(int argc, char **argv) {
     //Client heartbeat, only when number of clients gets to high
     diff = std::chrono::system_clock::now() - client_heartbeat_time;
     if(diff.count() > client_heartbeat_interval){ // numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
-      for (int i = 0; i < numLocalClients; i++)
+      for (int i = 0; i < MAXCLIENTS; i++)
       {
         fprintf(stderr,"checking heartbeat of client %d, active: %d\n",i,clientActive[i]);
         if (clientActive[i])
