@@ -711,7 +711,7 @@ int main(int argc, char **argv) {
   double numclients_interval = 5.0;
   double client_heartbeat_interval = 3.0;
   int master_down_counter = 0;
-  double clientTimeout = 60.0;
+  double clientTimeout = 5.0;
 
   fprintf(stderr,"starting main loop\n");
   while(!stop_server){
