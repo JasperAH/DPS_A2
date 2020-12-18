@@ -148,7 +148,7 @@ struct HelloHandler : public Pistache::Http::Handler {
           std::string data;
           std::string lineNumber;
           int found = -1;
-          for (int i = 0; i < localData.size(); i++)
+          for (int i = 0; i < localData.size(); i=i+2)
           {
             if (localData[i].first == -1)
             {
@@ -181,7 +181,6 @@ struct HelloHandler : public Pistache::Http::Handler {
             rStream << Pistache::Http::flush;
             localData[found].first = client;
             localData[found+1].first = client;
-            
             //writer.send(Pistache::Http::Code::Ok);
           }
           std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
@@ -759,13 +758,6 @@ int main(int argc, char **argv) {
               distributedData.at(j).first.first = -1;
             }
           }
-          //TODO workernode is down
-          /*
-          {
-            contact node and check if alive?
-            what if node restarts before this check is done, some data is never delivered as
-          }
-          */
         }
       }
       heartbeat_time = std::chrono::system_clock::now();
@@ -792,12 +784,14 @@ int main(int argc, char **argv) {
       {
         for (int y = localData.size() - 1; y >= 0 ; y--) //TODO does not scale well
         {
-          if(localData[y].second.first == deletedLines[x]){
+          if(localData[y+1].second.first == deletedLines[x]+1){
             localData.erase(localData.begin() + y + 1 );
+          }
+          if(localData[y].second.first == deletedLines[x]){
             localData.erase(localData.begin() + y );
-            deletedLines.erase(deletedLines.begin() + x);
           }
         } 
+        deletedLines.erase(deletedLines.begin() + x);
       }
     }
     
@@ -814,7 +808,7 @@ int main(int argc, char **argv) {
     if(diff.count() > client_heartbeat_interval){ // numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
       for (int i = 0; i < MAXCLIENTS; i++)
       {
-        fprintf(stderr,"checking heartbeat of client %d, active: %d\n",i,clientActive[i]);
+        //fprintf(stderr,"checking heartbeat of client %d, active: %d\n",i,clientActive[i]);
         if (clientActive[i])
         {
           diff = std::chrono::system_clock::now() - clientHeartbeat[i];
