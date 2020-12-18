@@ -1,4 +1,8 @@
-# DPS_A2
+# DiLae
+
+A SETI@Home like system for workload distribution, supporting a varying amount of clients and worker-servers, currently implemented to calculate a dot product. 
+
+## Setup
 Some steps required to get it working.
 First, install pistache (https://github.com/pistacheio/pistache): 
 ```
