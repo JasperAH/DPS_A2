@@ -101,7 +101,7 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
             std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
-            fprintf(stdout,"getProblem in %f\n",diff.count());
+            fprintf(stdout,"client getProblem in %f\n",diff.count());
             std::ofstream out(dataPath+"tmp_data.csv" + ID); //TODO magic name
             out << readBuffer;
             out.close();
@@ -188,7 +188,7 @@ int computeProblem(int &lineNumber, std::string ID){
         file.close();
 
         int result = 0;
-        if(data.size() > 0){
+        if(data.size() == 2){
             for (int i = 0; i < data[0].size(); i++)
             {
                 result += data[0][i] * data[1][i];

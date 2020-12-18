@@ -139,6 +139,7 @@ struct HelloHandler : public Pistache::Http::Handler {
       // usage: <host>:<port>/?q=get_problem\&clientID=<clientID>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "get_problem"){
+          std::chrono::time_point<std::chrono::system_clock> getProblemTimer = std::chrono::system_clock::now();
           int client = atoi(request.query().get("clientID").get().c_str());
           clientHeartbeat[client] = std::chrono::system_clock::now();
           Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok);
@@ -165,7 +166,7 @@ struct HelloHandler : public Pistache::Http::Handler {
             std::string tmp("X");
             rStream << tmp.c_str() << "\n";
             //rStream << std::to_string(Pistache::Http::Code::Service_Unavailable).c_str();
-            rStream << Pistache::Http::ends;
+            //rStream << Pistache::Http::ends;
             /* TODO send error that data was not available ofzo, mss meer data ophalen?, mss niet ivm blocking */
           }
           else
@@ -178,9 +179,12 @@ struct HelloHandler : public Pistache::Http::Handler {
             rStream << Pistache::Http::flush;
             localData[found].first = client;
             localData[found+1].first = client;
-            rStream << Pistache::Http::ends; // also flushes and ends the stream
-            writer.send(Pistache::Http::Code::Ok);
+            
+            //writer.send(Pistache::Http::Code::Ok);
           }
+          std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
+          fprintf(stdout,"worker getProblem in %f\n",diff.count());
+          rStream << Pistache::Http::ends; // also flushes and ends the stream
         }
       }
       // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>\&clientID=<clientID>
