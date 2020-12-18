@@ -183,7 +183,7 @@ struct HelloHandler : public Pistache::Http::Handler {
             //writer.send(Pistache::Http::Code::Ok);
           }
           std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
-          fprintf(stdout,"worker getProblem in %f\n",diff.count());
+          fprintf(stdout,"CID %d worker getProblem in %f\n",client,diff.count());
           rStream << Pistache::Http::ends; // also flushes and ends the stream
         }
       }
