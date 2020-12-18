@@ -1,6 +1,6 @@
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -Wextra -Wno-unused-result -Wno-unused-parameter -Wno-unused-but-set-variable -O0 -g
+CFLAGS = -Wall -Wextra -Wno-unused-result -Wno-unused-parameter -Wno-unused-but-set-variable -O3 -g
 IFLAGS = -lcurl 
 IFLAGS += $(shell pkg-config --libs libpistache)
 IFLAGS += $(shell pkg-config --cflags libpistache)
