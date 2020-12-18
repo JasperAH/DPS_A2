@@ -36,7 +36,7 @@ It seems the above instructions do not hold up on the DAS5 cluster. Might have t
 - [x] a client asks for connection at a master node, gets a worker node assigned, gets connection
 - [x] a workload is given to a client and result is returned
 - [x] workload distribution at master-node
-- [ ] failure detection with heartbeats and or timeouts in server
+- [x] failure detection with heartbeats and or timeouts in server
 - [x] failure detection for client failure with heartbeats and or timeouts
 - [x] master node election system in case of failure
 - [ ] workernode failure work recovery
