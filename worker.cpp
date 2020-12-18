@@ -306,6 +306,7 @@ struct HelloHandler : public Pistache::Http::Handler {
                 if(distributedData.at(i).first.second == false){
                   findOldData = true;
                   dataIndex = i;
+                  break;
                 }
               }
               if(findOldData){
@@ -320,7 +321,7 @@ struct HelloHandler : public Pistache::Http::Handler {
                   }
                   rStream << line.c_str() << "\n";
                   rStream << Pistache::Http::flush; //optional? should ensure sending data more often
-                  writer.send(Pistache::Http::Code::Ok);      
+                  //writer.send(Pistache::Http::Code::Ok);      
                 }   
 
                 rStream << Pistache::Http::ends;
