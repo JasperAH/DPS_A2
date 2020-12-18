@@ -5,6 +5,7 @@
 #include <curl/curl.h>
 #include <fstream>
 #include <vector>
+#include <chrono>
 
 std::string line1;
 std::string line2;
@@ -93,7 +94,10 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        std::chrono::time_point<std::chrono::system_clock> getProblemTimer = std::chrono::system_clock::now();
         res = curl_easy_perform(curl);
+        std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
+        fprintf(stdout,"getProblem in %f\n",diff.count());
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
             std::ofstream out(dataPath+"tmp_data.csv" + ID); //TODO magic name
@@ -106,7 +110,7 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         }
         else if(res == 503 || readBuffer[0] == 'X') //Pistache::Http::Code::Service_Unavailable
         {
-            std::cout << "Data unavailable" << std::endl;
+            fprintf(stderr,"Data unavailable\n");
             return -1;
         }
         
@@ -220,7 +224,7 @@ void sendResult(std::string host, int result, int lineNumber, int clientID){
         curl_easy_cleanup(curl);
         
         if(res == 0){ // we got a response
-            std::cout << "result succesfully uploaded." << std::endl;
+            fprintf(stderr,"result succesfully uploaded.\n");
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
@@ -250,13 +254,14 @@ void checkout(std::string host, int localID){
         curl_easy_cleanup(curl);
         
         if(res == 0){ // we got a response TODO add response codes or something for each error case
-            std::cout << "Succesfull checkout" << std::endl;
+            fprintf(stderr,"Succesfull checkout\n");
+            
         } else if(res == 7){
             stop_client = true;
         }
         else
         {
-            std::cout << "checkout failure" <<std::endl;
+            fprintf(stderr,"checkout failure\n");
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
@@ -285,7 +290,7 @@ int signup(std::string host){
             }
             else{
                 try{
-                    std::cout << "Succesfull signup " << readBuffer.c_str() << std::endl;
+                    fprintf(stderr,"Succesfull signup %s\n",readBuffer.c_str());
                     if(readBuffer == "")
                         return -1;
                     else
@@ -300,7 +305,7 @@ int signup(std::string host){
         }
         else
         {
-            std::cout << "signup failure " << std::endl;
+            fprintf(stderr,"signup failure \n");
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
@@ -329,14 +334,14 @@ int main(int argc, char **argv)
         std::string master = getMaster(host);
         if (master == "failure")
         {
-            std::cout << "No master assigned" << std::endl;
+            fprintf(stderr,"No master assigned\n");
             numCheckins--;
             continue;
         }
         std::string worker = getWorker(master);
         if (worker == "")
         {
-            std::cout << "empty worker assignment" << std::endl;
+            fprintf(stderr,"empty worker assignment\n");
             numCheckins--;
             continue;
         }
@@ -349,7 +354,7 @@ int main(int argc, char **argv)
         }
         if (x == 5)
         {
-            std::cout << "No viable connection was made, exit program" << std::endl;
+            fprintf(stderr,"No viable connection was made, exit program\n");
             numCheckins--;
             continue;
         }
@@ -375,7 +380,7 @@ int main(int argc, char **argv)
         }
         checkout(worker, clientID);
     }
-    std::cout << "Client " << ID << " has finished all checkins and problems." << std::endl;
+    fprintf(stderr,"Client %s has finished all checkins and problems.\n",ID.c_str());
 
     return 0;
 }
