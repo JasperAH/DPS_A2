@@ -6,6 +6,7 @@
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include <thread>
 
 std::string line1;
 std::string line2;
@@ -205,7 +206,7 @@ int computeProblem(int &lineNumber, std::string ID){
     return -1;
 }
 
-void sendResult(std::string host, int result, int lineNumber, int clientID){
+bool sendResult(std::string host, int result, int lineNumber, int clientID){
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
@@ -232,11 +233,13 @@ void sendResult(std::string host, int result, int lineNumber, int clientID){
         
         if(res == 0){ // we got a response
             fprintf(stderr,"result succesfully uploaded.\n");
+            return true;
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
+        return false;
     }
-    return;
+    return false;
 }
 
 void checkout(std::string host, int localID){
@@ -376,7 +379,13 @@ int main(int argc, char **argv)
             else{
                 int lineNumber;
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
-                sendResult(worker, result, lineNumber, clientID);
+                srand(clientID);
+                while(!sendResult(worker, result, lineNumber, clientID)){
+                    stop_calc_counter++;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(rand()%1900 + 100)); // sleep for a random time
+                    if(stop_calc_counter>100)
+                        break;
+                }
                 //numProblems++; // keep going as long as there are problems to solve
                 numCheckins = 10;
                 stop_calc_counter = 0;
