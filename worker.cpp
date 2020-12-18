@@ -926,7 +926,6 @@ int main(int argc, char **argv) {
       bool done = true;
       for(int i = 0; i < distributedData.size(); i = i+2){
         if(distributedData.at(i).first.second == false){
-          fprintf(stderr,"found non-computed data at index %d\n",i);
           done = false;
           break;
         }
