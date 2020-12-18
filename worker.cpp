@@ -14,6 +14,8 @@ const std::string dataPath = "/var/scratch/ddps2008/";
 //const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
 //const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
+const bool verboseLogging = false;
+
 const bool measureCurlRoundtrip = false;
 
 bool stop_server = false;
@@ -46,7 +48,9 @@ int curIndex = 0;
 int getProblemDataSize = 2; //amount of data rows to return when /getproblemdata is called
 bool rollback = false;
 std::mutex output_lock;
-std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
+std::mutex localdata_lock;
+
+
 std::chrono::time_point<std::chrono::system_clock> start_time;
 std::chrono::time_point<std::chrono::system_clock> end_time;
 bool started = false;
@@ -141,61 +145,88 @@ struct HelloHandler : public Pistache::Http::Handler {
       // usage: <host>:<port>/?q=get_problem\&clientID=<clientID>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){
         if (request.query().get("q").get() == "get_problem"){
+          if(verboseLogging) fprintf(stderr,"get_problem called\n");
           std::chrono::time_point<std::chrono::system_clock> getProblemTimer = std::chrono::system_clock::now();
+          if(verboseLogging) fprintf(stderr,"convert clientID \" %s \" to int\n",request.query().get("clientID").get().c_str());
           int client = atoi(request.query().get("clientID").get().c_str());
+          if(verboseLogging) fprintf(stderr,"access clientHeartbeat at index %d of max %d\n",client,MAXCLIENTS);
           clientHeartbeat[client] = std::chrono::system_clock::now();
           Pistache::Http::ResponseStream rStream = writer.stream(Pistache::Http::Code::Ok);
           std::string data;
           std::string lineNumber;
           int found = -1;
+          if(verboseLogging) fprintf(stderr,"start looking for new data in localdata of size %lu\n",localData.size());
+          std::unique_lock<std::mutex> ldLock(localdata_lock,std::defer_lock);
+          ldLock.lock();
           for (int i = 0; i < localData.size(); i=i+2)
           {
             if (localData[i].first == -1)
             {
+              if(verboseLogging) fprintf(stderr,"unsent localdata found\n");
               data = localData[i].second.second;
               lineNumber = std::to_string (localData[i].second.first);
               found = i;
+              if(verboseLogging) fprintf(stderr,"unsent localdata accessed\n");
               break;
             }
           }
+          ldLock.unlock();
+          if(verboseLogging) fprintf(stderr,"post looking for new localdata\n");
+          ldLock.lock();
           if(found == -1 && localData.size()>0){ // resend data from potential stragglers
+            if(verboseLogging) fprintf(stderr,"accessing sent data at index 0\n");
             data = localData[0].second.second;
             lineNumber = std::to_string(localData[0].second.first);
             found = 0;
+            if(verboseLogging) fprintf(stderr,"previously sent localdata found\n");
           }
+          if(verboseLogging) fprintf(stderr,"post looking for previously sent data\n");
           if (found == -1)
           {
+            if(verboseLogging) fprintf(stderr,"no remainding data found\n");
             std::string tmp("X");
             rStream << tmp.c_str() << "\n";
             //rStream << std::to_string(Pistache::Http::Code::Service_Unavailable).c_str();
             //rStream << Pistache::Http::ends;
             /* TODO send error that data was not available ofzo, mss meer data ophalen?, mss niet ivm blocking */
           }
-          else
+          else if(found < localData.size() && (found+1) < localData.size())
           {
+            if(verboseLogging) fprintf(stderr,"sending data, line: %s\n",lineNumber.c_str());
             rStream << lineNumber.c_str() << "\n";
             rStream << Pistache::Http::flush;
+            if(verboseLogging) fprintf(stderr,"accessing localdata at index %d, size is %lu\n",found,localData.size());
             rStream << localData[found].second.second.c_str() << "\n";
             rStream << Pistache::Http::flush;
+            if(verboseLogging) fprintf(stderr,"accessing localdata at index %d, size is %lu\n",found+1,localData.size());
             rStream << localData[found+1].second.second.c_str() << "\n";
             rStream << Pistache::Http::flush;
+            if(verboseLogging) fprintf(stderr,"data sent, updating index %d in localData\n",found);
             localData[found].first = client;
+            if(verboseLogging) fprintf(stderr,"data sent, updating index %d in localData\n",found+1);
             localData[found+1].first = client;
-            //writer.send(Pistache::Http::Code::Ok);
+            if(verboseLogging) fprintf(stderr,"indexes updated\n");
           }
+          ldLock.unlock();
           std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
           if(measureCurlRoundtrip) fprintf(stdout,"CID %d worker getProblem in %f\n",client,diff.count());
+          if(verboseLogging) fprintf(stderr,"get_problem done\n");
           rStream << Pistache::Http::ends; // also flushes and ends the stream
         }
       }
       // usage: <host>:<port>/?q=uploadFromClient\&index=<vector_index>\&result=<result>\&clientID=<clientID>
       if(request.method() == Pistache::Http::Method::Post && request.resource().compare("/?q=")){ //TODO deassign worker in master so more clients can be assigned
         if (request.query().get("q").get() == "uploadFromClient"){
+          if(verboseLogging) fprintf(stderr,"receiving data from client\n");
+          if(verboseLogging) fprintf(stderr,"converting result %s, index %s and clientID %s\n",request.query().get("result").get().c_str(),request.query().get("index").get().c_str(),request.query().get("clientID").get().c_str());
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           int client = atoi(request.query().get("clientID").get().c_str());
+          if(verboseLogging) fprintf(stderr,"accessing clientHeartbeat at index %d\n",client);
           clientHeartbeat[client] = std::chrono::system_clock::now();
+          if(verboseLogging) fprintf(stderr,"adding results to storedresults\n");
           storedResults.push_back({ind, res});
+          if(verboseLogging) fprintf(stderr,"done receiving from client\n");
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -212,15 +243,21 @@ struct HelloHandler : public Pistache::Http::Handler {
       if(master_id == worker_id && request.resource().compare("/?q=") && request.method() == Pistache::Http::Method::Post){
         if (request.query().get("q").get() == "result")
         {
+          if(verboseLogging) fprintf(stderr,"receiving result\n");
           int res = atoi(request.query().get("result").get().c_str());
           int ind = atoi(request.query().get("index").get().c_str());
           if(distributedData.at(ind).first.second == false){
+            if(verboseLogging) fprintf(stderr,"locking for output\n");
+            if(verboseLogging) fprintf(stderr,"setting indexes %d and %d of distributedData size: %lu\n",ind,ind+1,distributedData.size());
+            std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
             oLock.lock();
             output += res;
             distributedData.at(ind).first.second = true;
             distributedData.at(ind+1).first.second = true;
             oLock.unlock();
+            if(verboseLogging) fprintf(stderr,"output unlocked\n");
           }
+          if(verboseLogging) fprintf(stderr,"done receiving\n");
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -241,6 +278,8 @@ struct HelloHandler : public Pistache::Http::Handler {
           numLocalClients--;
           int cID = atoi(request.query().get("clientID").get().c_str());
           clientActive[cID] = false;
+          std::unique_lock<std::mutex> ldLock(localdata_lock,std::defer_lock);
+          ldLock.lock();
           for (int x = localData.size()-1; x >= 0 ; x--)
           {
             if (localData[x].first == cID)
@@ -249,6 +288,7 @@ struct HelloHandler : public Pistache::Http::Handler {
             }
             
           }
+          ldLock.unlock();
           writer.send(Pistache::Http::Code::Ok); // return OK
         }
       }
@@ -391,7 +431,7 @@ bool sendHeartBeat(){
 void checkpoint_data(){
   fprintf(stderr,"snapshotting current progress.... ");
   std::ofstream csv_file(dataPath+"snapshot.csv");
-
+  std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
   oLock.lock();
   csv_file << output << "\n"; // snapshot partial result
   oLock.unlock();
@@ -438,6 +478,7 @@ void read_input_data(){
 
   if(csv_file.is_open()){
     std::getline(csv_file,line);
+    std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
     oLock.lock();
     output = atoll(line.c_str()); // first line in the file is the snapshotted result
     oLock.unlock();
@@ -532,12 +573,15 @@ void ask_data(){ // call using <host>:<port>/?q=getproblemdata\&workerID=<worker
 
   curl = curl_easy_init();
   if(curl) {
+      std::unique_lock<std::mutex> ldLock(localdata_lock,std::defer_lock);
       std::string host(hostnames[master_id]);
       std::string tmp = "q=getproblemdata&workerID=";
       host.append("/?");
       tmp.append(std::to_string(worker_id));
       tmp.append("&datasize=");
+      ldLock.lock();
       tmp.append(std::to_string((MINIMUM_STORE - localData.size()) + 4)); //TODO 4 is arbitrary and magic, find optimum
+      ldLock.unlock();
       host.append(tmp);
       char* data = &tmp[0];
       curl_easy_setopt(curl, CURLOPT_URL, host.c_str());
@@ -561,8 +605,10 @@ void ask_data(){ // call using <host>:<port>/?q=getproblemdata\&workerID=<worker
         int lineIndex = std::stoi(row);
         while (std::getline(lineStream, row, '\n'))
         {
-            localData.push_back({-1,{lineIndex,row}});
-            lineIndex++;
+          ldLock.lock();
+          localData.push_back({-1,{lineIndex,row}});
+          ldLock.unlock();
+          lineIndex++;
         }
         
       }
@@ -726,11 +772,14 @@ int main(int argc, char **argv) {
   int master_down_counter = 0;
   double clientTimeout = 5.0;
 
+  std::unique_lock<std::mutex> ldLock(localdata_lock,std::defer_lock);
   fprintf(stderr,"starting main loop\n");
   while(!stop_server){
+    if(verboseLogging) fprintf(stderr,"Start while\n");
     // HEARTBEAT
     diff = std::chrono::system_clock::now() - heartbeat_time;
     if((master_id != worker_id) && (diff.count() > heartbeat_interval)){ // every 5 seconds, heartbeat
+      if(verboseLogging) fprintf(stderr,"master heartbeat\n");
       if(!sendHeartBeat()){ // master is down, check every second
         master_down_counter++;
         heartbeat_interval = 1.0;
@@ -747,6 +796,7 @@ int main(int argc, char **argv) {
     }
     if ((master_id == worker_id) && n_workers > 1 && (diff.count() > master_interval))
     {
+      if(verboseLogging) fprintf(stderr,"master check client heartbeat\n");
       for (int i = 0; i < n_workers; i++)
       {
         std::chrono::duration<double> timediff = std::chrono::system_clock::now() - worker_heartbeats[i];
@@ -762,14 +812,19 @@ int main(int argc, char **argv) {
       }
       heartbeat_time = std::chrono::system_clock::now();
     }
-    
+    if(verboseLogging) fprintf(stderr,"heartbeats done\n");
 
-
-    if (localData.size() < MINIMUM_STORE){// && dataAvailableInServer){
+    if(verboseLogging) fprintf(stderr,"pre ask for data\n");
+    ldLock.lock();
+    size_t ldSize = localData.size();
+    ldLock.unlock();
+    if (ldSize < MINIMUM_STORE){// && dataAvailableInServer){
+      if(verboseLogging) fprintf(stderr,"ask for new data\n");
       ask_data();
     }
-
+    if(verboseLogging) fprintf(stderr,"post ask for data\n");
     if(storedResults.size()>0){
+      if(verboseLogging) fprintf(stderr,"Sending results start\n");
       std::vector<int> deletedLines;/*
       for (int i = storedResults.size()-1; i >= 0; i--)//TODO This is needed as long as the POST result only takes one result at a time
       {
@@ -780,44 +835,61 @@ int main(int argc, char **argv) {
       while(storedResults.size()>0){
         deletedLines.push_back(send_result(storedResults.size()-1));
       }
+      if(verboseLogging) fprintf(stderr,"deleting localdata\n");
       for (int x = deletedLines.size() - 1; x >= 0 ; x--)
       {
+        ldLock.lock();
         for (int y = localData.size() - 1; y >= 0 ; y--) //TODO does not scale well
         {
-          if(localData[y+1].second.first == deletedLines[x]+1){
-            localData.erase(localData.begin() + y + 1 );
-          }
-          if(localData[y].second.first == deletedLines[x]){
-            localData.erase(localData.begin() + y );
+          if(verboseLogging) fprintf(stderr,"loop x %d y %d\n",x,y);
+          if(verboseLogging) fprintf(stderr,"localdata size: %lu\n",localData.size());
+          if(verboseLogging) fprintf(stderr,"deletedlines size: %lu\n",deletedLines.size());
+          if(verboseLogging) fprintf(stderr,"localdata at %d: %d\n",y+1,localData[y+1].second.first);
+          if(verboseLogging) fprintf(stderr,"localdata at %d: %d\n",y,localData[y].second.first);
+          if(verboseLogging) fprintf(stderr,"deletedlines at %d: %d\n",x,deletedLines[x]);
+          if(localData.size()>2 && (y+1) < localData.size()){
+            if(localData[y].second.first == deletedLines[x] && localData[y+1].second.first == deletedLines[x]+1){
+              if(verboseLogging) fprintf(stderr,"delete y+1 \n");
+              localData.erase(localData.begin() + y + 1 );
+              if(verboseLogging) fprintf(stderr,"delete y \n");
+              localData.erase(localData.begin() + y );
+            }
           }
         } 
+        ldLock.unlock();
+        if(verboseLogging) fprintf(stderr,"delete x\n");
         deletedLines.erase(deletedLines.begin() + x);
       }
+      if(verboseLogging) fprintf(stderr,"done sending and deleting\n");
     }
     
     diff = std::chrono::system_clock::now() - numclients_time;
     if (numLocalClientsServer != numLocalClients && diff.count() > numclients_interval)
     {
+      if(verboseLogging) fprintf(stderr,"updating numclients on master\n");
       updateNumClients();
       numclients_time = std::chrono::system_clock::now();
+      if(verboseLogging) fprintf(stderr,"done updating clients\n");
     }
     
 
     //Client heartbeat, only when number of clients gets to high
     diff = std::chrono::system_clock::now() - client_heartbeat_time;
     if(diff.count() > client_heartbeat_interval){ // numLocalClients > (int)(0.8 * numLocalClients)){ //TODO magic number
+      if(verboseLogging) fprintf(stderr,"worker check client heartbeats\n");
       for (int i = 0; i < MAXCLIENTS; i++)
       {
         //fprintf(stderr,"checking heartbeat of client %d, active: %d\n",i,clientActive[i]);
         if (clientActive[i])
         {
           diff = std::chrono::system_clock::now() - clientHeartbeat[i];
-          fprintf(stderr,"time since last heartbeat of client %d: %f\n",i,diff.count());
+          if(diff.count() > 10.0) fprintf(stderr,"time since last heartbeat of client %d: %f\n",i,diff.count());
           if (diff.count() > clientTimeout)
           {
             fprintf(stderr,"deactivating client %d\n",i);
             numLocalClients--;
             clientActive[i] = false;
+            ldLock.lock();
             for (int x = localData.size()-1; x >= 0 ; x--)
             {
               if (localData[x].first == i)
@@ -826,11 +898,13 @@ int main(int argc, char **argv) {
               }
               
             }
+            ldLock.unlock();
             fprintf(stderr,"client %d deactivated\n",i);
           }
         }
       }
       client_heartbeat_time = std::chrono::system_clock::now();
+      if(verboseLogging) fprintf(stderr,"check client heartbeats done\n");
     }
 
 
@@ -838,29 +912,34 @@ int main(int argc, char **argv) {
     // SNAPSHOT periodically
     diff = std::chrono::system_clock::now() - snapshot_time;
     if(master_id == worker_id && (diff.count() > snapshot_interval)){
+      if(verboseLogging) fprintf(stderr,"checkpointing state\n");
       checkpoint_data();
       snapshot_time = std::chrono::system_clock::now();
+      if(verboseLogging) fprintf(stderr,"done checkpointing state\n");
     }
 
     // check if we're done when all data has been distributed
     if(!stop_server && master_id == worker_id && distributedData.size() > 0 && distributedData.at(distributedData.size()-1).second.second >= inputData.at(0).size()){
+      if(verboseLogging) fprintf(stderr,"checking if done\n");
       bool done = true;
       for(int i = 0; i < distributedData.size(); i = i+2){
         if(distributedData.at(i).first.second == false){
+          fprintf(stderr,"found non-computed data at index %d\n",i);
           done = false;
           break;
         }
       }
-
       stop_server = done;
+      if(verboseLogging) fprintf(stderr,"done checking: stopping = %d\n",stop_server);
     }
-    //fprintf(stderr,"%d",stop_server);
+    if(verboseLogging) fprintf(stderr,"end loop\n");
   }
   fprintf(stderr,"stopping server\n");
   if(master_id == worker_id){
     end_time = std::chrono::system_clock::now();
     diff = end_time - start_time;
     checkpoint_data();
+    std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
     oLock.lock();
     fprintf(stdout, "result: %lld\n",output);
     oLock.unlock();
