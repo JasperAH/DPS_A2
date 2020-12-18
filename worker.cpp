@@ -540,7 +540,7 @@ void ask_data(){ // call using <host>:<port>/?q=getproblemdata\&workerID=<worker
         std::string row;
         std::vector<std::string> lines;
         std::getline(lineStream, row, '\n');
-        if(stoi(row) == -10){
+        if(row == "" || stoi(row) == -10){
           //TODO do something that means that there is no more data in server to distribute
           dataAvailableInServer = false;
           return;

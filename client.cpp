@@ -9,6 +9,8 @@
 std::string line1;
 std::string line2;
 
+bool stop_client = false;
+
 std::string dataPath = "/local/ddps2008/";
 
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -32,9 +34,11 @@ std::string getMaster(std::string host){
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
-
         if(res == 0){ // we got a response TODO add response codes or something for each error case
             return readBuffer;
+        }
+        if(res == 7){
+            stop_client = true;
         }
     }else{
         fprintf(stderr,"Could not init curl\n");
@@ -143,7 +147,7 @@ int computeProblem(int &lineNumber, std::string ID){
     std::string line;
     if (file.is_open()) {
         std::getline(file, line);
-        lineNumber = std::stoi(line);
+        lineNumber = (line == "") ? -1 : std::stoi(line);
         std::vector<std::vector<int>> data;
         while (std::getline(file, line))
         {
@@ -152,7 +156,21 @@ int computeProblem(int &lineNumber, std::string ID){
             std::vector<int> row;
             while (std::getline(lineStream, val, ','))
             {
-                row.push_back(std::stoi(val));
+                if(val != ""){ // protect against I/O failure during either network or drive write/read
+                    try{
+                        row.push_back(std::stoi(val));                        
+                    }    
+                    catch (const std::invalid_argument& e) {
+                        return -1;
+                    }
+                    catch (const std::out_of_range& e) {
+                        return -1;
+                    }
+                    catch (const std::exception& e)
+                    {
+                        return -1;
+                    }
+                }
             }
             data.push_back(row);
         }
@@ -225,9 +243,11 @@ void checkout(std::string host, int localID){
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
-
+        
         if(res == 0){ // we got a response TODO add response codes or something for each error case
             std::cout << "Succesfull checkout" << std::endl;
+        } else if(res == 7){
+            stop_client = true;
         }
         else
         {
@@ -270,6 +290,8 @@ int signup(std::string host){
                     return -1;
                 }
             }
+        } else if(res == 7){
+            stop_client = true;
         }
         else
         {
@@ -294,18 +316,23 @@ int main(int argc, char **argv)
 
     int numProblems = 10;
     int numCheckins = 10;
-
-    for(int i = 0; i < numCheckins; i++){
+    while(!stop_client){
+    //for(int i = 0; i < numCheckins; i++){
+       /*if(numCheckins <= 0){
+            stop_client = true;
+        }*/
         std::string master = getMaster(host);
         if (master == "failure")
         {
             std::cout << "No master assigned" << std::endl;
+            numCheckins--;
             continue;
         }
         std::string worker = getWorker(master);
         if (worker == "")
         {
             std::cout << "empty worker assignment" << std::endl;
+            numCheckins--;
             continue;
         }
         int clientID = signup(worker);
@@ -318,11 +345,14 @@ int main(int argc, char **argv)
         if (x == 5)
         {
             std::cout << "No viable connection was made, exit program" << std::endl;
+            numCheckins--;
             continue;
         }
+        numProblems = 10;
         for (int j = 0; j < numProblems; j++){
             if(getProblem(worker, clientID, ID) == -1){
                 checkout(worker, clientID);
+                numCheckins--;
                 continue;
             }
             else{
@@ -330,6 +360,7 @@ int main(int argc, char **argv)
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
                 sendResult(worker, result, lineNumber, clientID);
                 numProblems++; // keep going as long as there are problems to solve
+                numCheckins = 10;
             }
         }
         checkout(worker, clientID);
