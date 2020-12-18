@@ -851,6 +851,7 @@ int main(int argc, char **argv) {
       for(int i = 0; i < distributedData.size(); i = i+2){
         if(distributedData.at(i).first.second == false)
           done = false;
+          break;
       }
 
       stop_server = done;
