@@ -847,14 +847,16 @@ int main(int argc, char **argv) {
           if(verboseLogging) fprintf(stderr,"localdata at %d: %d\n",y+1,localData[y+1].second.first);
           if(verboseLogging) fprintf(stderr,"localdata at %d: %d\n",y,localData[y].second.first);
           if(verboseLogging) fprintf(stderr,"deletedlines at %d: %d\n",x,deletedLines[x]);
-          if(localData.size()>2 && (y+1) < localData.size()){
-            if(localData[y].second.first == deletedLines[x] && localData[y+1].second.first == deletedLines[x]+1){
-              if(verboseLogging) fprintf(stderr,"delete y+1 \n");
-              localData.erase(localData.begin() + y + 1 );
-              if(verboseLogging) fprintf(stderr,"delete y \n");
-              localData.erase(localData.begin() + y );
-            }
+
+          if(localData.size()>1 && (y+1) < localData.size() && localData[y+1].second.first == deletedLines[x]+1){
+            if(verboseLogging) fprintf(stderr,"delete y+1 \n");
+            localData.erase(localData.begin() + y + 1 );
           }
+          if(localData.size()>1 && y < localData.size() && localData[y].second.first == deletedLines[x]){
+            if(verboseLogging) fprintf(stderr,"delete y \n");
+            localData.erase(localData.begin() + y );
+          }
+          
         } 
         ldLock.unlock();
         if(verboseLogging) fprintf(stderr,"delete x\n");
