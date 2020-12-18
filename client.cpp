@@ -11,6 +11,7 @@ std::string line2;
 
 bool stop_client = false;
 bool stop_calc = false;
+int stop_calc_counter = 0;
 
 std::string dataPath = "/local/ddps2008/";
 
@@ -100,7 +101,7 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
             out.close();
             return 1;
         } else if(res == 7){
-            stop_calc = true;
+            stop_calc_counter ++;
             return -1;
         }
         else if(res == 503 || readBuffer[0] == 'X') //Pistache::Http::Code::Service_Unavailable
@@ -367,7 +368,10 @@ int main(int argc, char **argv)
                 sendResult(worker, result, lineNumber, clientID);
                 //numProblems++; // keep going as long as there are problems to solve
                 numCheckins = 10;
+                stop_calc_counter = 0;
             }
+            if(stop_calc_counter > 100)
+                stop_calc = true;
         }
         checkout(worker, clientID);
     }
