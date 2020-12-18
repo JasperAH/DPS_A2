@@ -384,9 +384,11 @@ bool sendHeartBeat(){
 
 void checkpoint_data(){
   fprintf(stderr,"snapshotting current progress.... ");
+  std::unique_lock<std::mutex> oLock(output_lock,std::defer_lock);
   std::ofstream csv_file(dataPath+"snapshot.csv");
+  oLock.lock();
   csv_file << output << "\n"; // snapshot partial result
-
+  oLock.unlock();
   for(int i = 0; i < inputData.at(0).size(); ++i){
     for(int col = 0; col < inputData.size(); ++col){
       csv_file << inputData.at(col).at(i);
@@ -399,11 +401,14 @@ void checkpoint_data(){
   csv_file.close();
   if(distributedData.size()>0){
     csv_file.open(dataPath+"snapshot_distributed.csv");
+
     for(int i = 0; i < distributedData.size(); ++i){
+      oLock.lock();
       csv_file << std::to_string(distributedData.at(i).first.first) << ",";
       csv_file << std::to_string(distributedData.at(i).first.second) << ",";
       csv_file << std::to_string(distributedData.at(i).second.first) << ",";
       csv_file << std::to_string(distributedData.at(i).second.second) << "\n";
+      oLock.lock();
     }
     csv_file.close();
   }
