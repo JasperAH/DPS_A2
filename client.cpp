@@ -387,6 +387,7 @@ int main(int argc, char **argv)
                 } 
                 int lineNumber;
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
+                if(result == -1) continue;
                 srand(clientID);
                 while(!sendResult(worker, result, lineNumber, clientID)){
                     stop_calc_counter++;
