@@ -8,6 +8,9 @@
 #include <chrono>
 #include <thread>
 
+const bool measureCurlRoundtrip = false;
+bool measureTimeUntilFirstWorkload = true;
+
 std::string line1;
 std::string line2;
 
@@ -102,7 +105,7 @@ int getProblem(std::string host, int clientID, std::string ID){ //TODO
         curl_easy_cleanup(curl);
         if(res == 0 && readBuffer[0] != 'X'){ // we got a response TODO add response codes or something for each error case
             std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
-            fprintf(stdout,"CID %d client getProblem in %f\n",clientID,diff.count());
+            if(measureCurlRoundtrip) fprintf(stdout,"CID %d client getProblem in %f\n",clientID,diff.count());
             std::ofstream out(dataPath+"tmp_data.csv" + ID); //TODO magic name
             out << readBuffer;
             out.close();
@@ -330,7 +333,7 @@ int main(int argc, char **argv)
         std::cout << "should be called as ./client [connectionpoint] [unique id]" << std::endl;
         return -1;
     }
-    
+    std::chrono::time_point<std::chrono::system_clock> getFirstWorkloadTimer = std::chrono::system_clock::now();
     std::string host = argv[1];
     std::string ID = argv[2];
 
@@ -377,6 +380,11 @@ int main(int argc, char **argv)
                 numCheckins--;
             }
             else{
+                std::chrono::duration<double> diff = std::chrono::system_clock::now() - getFirstWorkloadTimer;
+                if(measureTimeUntilFirstWorkload){
+                    measureTimeUntilFirstWorkload = false;
+                    fprintf(stdout,"%f\n",diff.count());
+                } 
                 int lineNumber;
                 int result = computeProblem(lineNumber, ID); //TODO do somethin with error (result == -1)
                 srand(clientID);

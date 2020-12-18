@@ -14,6 +14,8 @@ const std::string dataPath = "/var/scratch/ddps2008/";
 //const std::string dataPath = "/home/thomaswink/Documents/Studie/DDPS/DPS_A2/";
 //const std::string dataPath = "/home/user/Documents/DPS/A2/";
 
+const bool measureCurlRoundtrip = false;
+
 bool stop_server = false;
 
 int worker_id;
@@ -183,7 +185,7 @@ struct HelloHandler : public Pistache::Http::Handler {
             //writer.send(Pistache::Http::Code::Ok);
           }
           std::chrono::duration<double> diff = std::chrono::system_clock::now() - getProblemTimer;
-          fprintf(stdout,"CID %d worker getProblem in %f\n",client,diff.count());
+          if(measureCurlRoundtrip) fprintf(stdout,"CID %d worker getProblem in %f\n",client,diff.count());
           rStream << Pistache::Http::ends; // also flushes and ends the stream
         }
       }
