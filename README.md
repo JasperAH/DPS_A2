@@ -43,8 +43,8 @@ It seems the above instructions do not hold up on the DAS5 cluster. Might have t
 - [x] failure detection with heartbeats and or timeouts in server
 - [x] failure detection for client failure with heartbeats and or timeouts
 - [x] master node election system in case of failure
-- [ ] workernode failure work recovery
-- [ ] workernode failure client redistribution
+- [x] workernode failure work recovery
+- [x] workernode failure client redistribution (only when initial contact node is not down)
 
 
 
