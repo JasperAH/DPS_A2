@@ -49,4 +49,4 @@ It seems the above instructions do not hold up on the DAS5 cluster. Might have t
 
 
 ### Extra possible features
-- [ ] Dunamic redistribution of workload at master-node
+- [x] Dynamic redistribution of workload at master-node when workers are down or no more new worload is available
